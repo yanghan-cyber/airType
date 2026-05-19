@@ -675,31 +675,45 @@ async function showDone() {
     c.offsetHeight;
   }
 
-  // Clean up LLM processing state
-  c.classList.remove('thinking');
-  c.querySelectorAll('.llm-text, .thinking-content, .warning-icon, .warning-text').forEach(el => el.remove());
+  // Check if coming from thinking state (already 34x34)
+  const wasThinking = c.classList.contains('thinking');
 
   // Capture current visual state BEFORE cancelling animations to prevent snap
   captureAndCancel(c);
 
-  // Smooth morph to 34x34 via CSS transition
-  c.classList.add('morphing');
-  void c.offsetWidth;
-  c.style.width = '34px';
-  c.style.height = '34px';
-  c.style.borderRadius = '17px';
-  c.style.padding = '0';
+  // Clean up LLM processing state
+  c.classList.remove('thinking');
+  c.querySelectorAll('.llm-text, .thinking-content, .warning-icon, .warning-text').forEach(el => el.remove());
 
   $('spinner').classList.remove('on');
 
-  await sleep(260);
-  if (animGen !== gen) return;
-  c.classList.remove('morphing');
+  if (wasThinking) {
+    // Already at 34x34 — skip morph, show checkmark directly
+    c.style.width = '34px';
+    c.style.height = '34px';
+    c.style.borderRadius = '17px';
+    c.style.padding = '0';
 
-  // Resize window BEFORE showing checkmark to avoid position shift
-  invoke('resize_capsule_window', { width: 60.0, height: 60.0 }).catch(() => {});
-  await sleep(50);
-  if (animGen !== gen) return;
+    invoke('resize_capsule_window', { width: 60.0, height: 60.0 }).catch(() => {});
+    await sleep(40);
+    if (animGen !== gen) return;
+  } else {
+    // Smooth morph to 34x34 via CSS transition
+    c.classList.add('morphing');
+    void c.offsetWidth;
+    c.style.width = '34px';
+    c.style.height = '34px';
+    c.style.borderRadius = '17px';
+    c.style.padding = '0';
+
+    await sleep(260);
+    if (animGen !== gen) return;
+    c.classList.remove('morphing');
+
+    invoke('resize_capsule_window', { width: 60.0, height: 60.0 }).catch(() => {});
+    await sleep(50);
+    if (animGen !== gen) return;
+  }
 
   $('checkmark').classList.add('on');
   $('checkPath').classList.add('draw');
