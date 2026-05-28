@@ -76,6 +76,7 @@ body {
   transition: all 0.2s; font-weight: 600; flex-shrink: 0;
 }
 .rec-btn:hover { border-color: #1ed760; color: #1ed760; }
+.rec-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .hotkey-recorder.recording .rec-btn {
   border-color: #1ed760; background: rgba(29,217,96,0.1);
@@ -880,7 +881,19 @@ async function resetPosition() {
 
 // --- Status ---
 function setStatus(msg) {
-  document.getElementById('statusBar').textContent = msg;
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  // Error messages in red, success in green, others default
+  if (/失败|错误|不能|异常/.test(msg)) {
+    el.style.color = '#f3727f';
+  } else if (/已保存|已加载|已删除|已恢复/.test(msg)) {
+    el.style.color = '#1ed760';
+  } else {
+    el.style.color = '';
+  }
+  // Auto-clear after 5s
+  clearTimeout(el._clearTimer);
+  el._clearTimer = setTimeout(() => { el.textContent = '就绪'; el.style.color = ''; }, 5000);
 }
 
 // --- LLM Config (AI 处理 Tab) ---
@@ -932,21 +945,27 @@ function toggleAsrApiKeyVisibility() {
 }
 
 async function fetchAsrModels() {
+  const btn = document.querySelector('#asrModelInput + .rec-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '加载中...'; }
   try {
     const result = await invoke('fetch_asr_model_list');
     if (result.success && result.models) {
       allAsrModels = result.models.sort();
       setStatus('已加载 ' + allAsrModels.length + ' 个 ASR 模型');
     } else {
-      setStatus('获取模型列表失败: ' + (result.error || ''));
+      setStatus('ASR 模型加载失败: ' + (result.error || '未知错误'));
     }
   } catch (e) {
-    setStatus('获取模型列表失败: ' + e);
+    setStatus('ASR 模型加载失败: ' + e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
   }
 }
 
 async function testLlmConnection() {
   const resultEl = document.getElementById('llmTestResult');
+  const btn = resultEl.parentElement.querySelector('.rec-btn');
+  if (btn) { btn.disabled = true; }
   resultEl.textContent = '测试中...';
   resultEl.style.color = '#b3b3b3';
   try {
@@ -961,6 +980,8 @@ async function testLlmConnection() {
   } catch (e) {
     resultEl.textContent = '测试失败: ' + e;
     resultEl.style.color = '#f3727f';
+  } finally {
+    if (btn) { btn.disabled = false; }
   }
 }
 
@@ -1005,16 +1026,20 @@ function filterAsrModels() { renderDropdown('asrModelDropdown', 'asrModelInput',
 function showAsrModelDropdown() { renderDropdown('asrModelDropdown', 'asrModelInput', allAsrModels); }
 
 async function fetchModels() {
+  const btn = document.querySelector('#llmModel + .rec-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '加载中...'; }
   try {
     const result = await invoke('fetch_model_list');
     if (result.success && result.models) {
       allLlmModels = result.models.sort();
       setStatus('已加载 ' + allLlmModels.length + ' 个模型');
     } else {
-      setStatus('获取模型列表失败: ' + (result.error || ''));
+      setStatus('模型加载失败: ' + (result.error || '未知错误'));
     }
   } catch (e) {
-    setStatus('获取模型列表失败: ' + e);
+    setStatus('模型加载失败: ' + e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
   }
 }
 

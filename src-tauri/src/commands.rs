@@ -160,13 +160,15 @@ pub fn save_config(
 }
 
 #[tauri::command]
-pub fn fetch_asr_model_list() -> serde_json::Value {
-    let cfg = load_config();
-    let client = crate::asr::AsrClient::new(&cfg.backend_url, &cfg.asr_api_key);
-    match client.list_models() {
-        Ok(models) => serde_json::json!({"success": true, "models": models}),
-        Err(e) => serde_json::json!({"success": false, "error": e.to_string()}),
-    }
+pub async fn fetch_asr_model_list() -> serde_json::Value {
+    tokio::task::spawn_blocking(|| {
+        let cfg = load_config();
+        let client = crate::asr::AsrClient::new(&cfg.backend_url, &cfg.asr_api_key);
+        match client.list_models() {
+            Ok(models) => serde_json::json!({"success": true, "models": models}),
+            Err(e) => serde_json::json!({"success": false, "error": e.to_string()}),
+        }
+    }).await.unwrap_or_else(|_| serde_json::json!({"success": false, "error": "任务异常"}))
 }
 
 #[tauri::command]
@@ -257,24 +259,28 @@ pub fn save_llm_config(
 }
 
 #[tauri::command]
-pub fn test_llm_connection() -> serde_json::Value {
-    let cfg = load_config();
-    let client = crate::llm::LlmClient::new(cfg.llm);
-    match client.health() {
-        Ok(true) => serde_json::json!({"connected": true}),
-        Ok(false) => serde_json::json!({"connected": false, "error": "API 返回错误"}),
-        Err(e) => serde_json::json!({"connected": false, "error": e.to_string()}),
-    }
+pub async fn test_llm_connection() -> serde_json::Value {
+    tokio::task::spawn_blocking(|| {
+        let cfg = load_config();
+        let client = crate::llm::LlmClient::new(cfg.llm);
+        match client.health() {
+            Ok(true) => serde_json::json!({"connected": true}),
+            Ok(false) => serde_json::json!({"connected": false, "error": "API 返回错误"}),
+            Err(e) => serde_json::json!({"connected": false, "error": e.to_string()}),
+        }
+    }).await.unwrap_or_else(|_| serde_json::json!({"connected": false, "error": "任务异常"}))
 }
 
 #[tauri::command]
-pub fn fetch_model_list() -> serde_json::Value {
-    let cfg = load_config();
-    let client = crate::llm::LlmClient::new(cfg.llm);
-    match client.list_models() {
-        Ok(models) => serde_json::json!({"success": true, "models": models}),
-        Err(e) => serde_json::json!({"success": false, "error": e.to_string()}),
-    }
+pub async fn fetch_model_list() -> serde_json::Value {
+    tokio::task::spawn_blocking(|| {
+        let cfg = load_config();
+        let client = crate::llm::LlmClient::new(cfg.llm);
+        match client.list_models() {
+            Ok(models) => serde_json::json!({"success": true, "models": models}),
+            Err(e) => serde_json::json!({"success": false, "error": e.to_string()}),
+        }
+    }).await.unwrap_or_else(|_| serde_json::json!({"success": false, "error": "任务异常"}))
 }
 
 // ── Processing mode commands ──
