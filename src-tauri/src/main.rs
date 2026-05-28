@@ -46,6 +46,10 @@ fn main() {
     let cfg = config::AppConfig::load(&config_path);
 
     let app_state = AppState::new();
+    {
+        let mut s = app_state.lock().unwrap();
+        s.enabled = cfg.enabled;
+    }
     let audio_buffer: Arc<Mutex<AudioBuffer>> = Arc::new(Mutex::new(AudioBuffer::new(16000)));
     let audio_sample_rate: Arc<Mutex<u32>> = Arc::new(Mutex::new(16000));
 

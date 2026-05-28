@@ -1,13 +1,20 @@
+use std::sync::{Arc, Mutex};
 use tauri::{
     AppHandle, Manager,
-    menu::{MenuBuilder, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, MenuBuilder, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
     WebviewUrl, WebviewWindowBuilder,
 };
-use image::GenericImageView;
+
+fn tooltip_text(enabled: bool) -> &'static str {
+    if enabled { "AirType - 已启用" } else { "AirType - 已禁用" }
+}
 
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let enabled = MenuItem::with_id(app, "enabled", "已启用语音输入", true, None::<&str>)?;
+    let config_path = crate::config::config_path();
+    let cfg = crate::config::AppConfig::load(&config_path);
+
+    let enabled = CheckMenuItem::with_id(app, "enabled", "已启用语音输入", true, cfg.enabled, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let settings = MenuItem::with_id(app, "settings", "设置...", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
@@ -29,12 +36,26 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let tray = TrayIconBuilder::with_id("main")
         .icon(tauri::image::Image::new_owned(icon_rgba, icon_w, icon_h))
         .menu(&menu)
+        .tooltip(tooltip_text(cfg.enabled))
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "enabled" => {
-                    if let Some(state) = app.try_state::<std::sync::Mutex<crate::state::AppState>>() {
+                    if let Some(state) = app.try_state::<Arc<Mutex<crate::state::AppState>>>() {
                         let mut s = state.lock().unwrap();
                         s.enabled = !s.enabled;
+                        let new_enabled = s.enabled;
+                        crate::log::log_debug(&format!("[tray] enabled toggled to {}", new_enabled));
+                        drop(s);
+
+                        let _ = enabled.set_checked(new_enabled);
+
+                        let mut cfg = crate::config::AppConfig::load(&crate::config::config_path());
+                        cfg.enabled = new_enabled;
+                        cfg.save(&crate::config::config_path());
+
+                        if let Some(tray) = app.tray_by_id("main") {
+                            let _ = tray.set_tooltip(Some(tooltip_text(new_enabled)));
+                        }
                     }
                 }
                 "settings" => {
