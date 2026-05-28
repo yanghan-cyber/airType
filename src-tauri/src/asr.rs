@@ -99,6 +99,7 @@ impl AsrClient {
 
     pub fn list_models(&self) -> Result<Vec<String>, AsrError> {
         let resp = self.authed_request(reqwest::Method::GET, &format!("{}/models", self.base_url))
+            .timeout(Duration::from_secs(10))
             .send()
             .map_err(|e| AsrError::ConnectionFailed(e.to_string()))?;
         let body: serde_json::Value = resp.json()

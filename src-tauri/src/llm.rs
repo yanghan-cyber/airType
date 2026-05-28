@@ -161,6 +161,7 @@ impl LlmClient {
         let resp = self.client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .timeout(Duration::from_secs(10))
             .send()
             .map_err(|e| LlmError::ConnectionFailed(e.to_string()))?;
 
@@ -197,6 +198,7 @@ impl LlmClient {
         let resp = self.client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .timeout(Duration::from_secs(5))
             .send()
             .map_err(|e| LlmError::ConnectionFailed(e.to_string()))?;
 

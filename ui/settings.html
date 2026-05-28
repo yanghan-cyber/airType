@@ -450,7 +450,7 @@ body {
     <div class="backend-status" id="backendStatus">
       <div class="backend-status-row">
         <span class="backend-status-label">连接状态</span>
-        <span class="backend-status-value" id="bsConn"><span class="status-dot off"></span>检测中...</span>
+        <span class="backend-status-value" id="bsConn"><span class="status-dot off"></span>点击刷新检测</span>
       </div>
     </div>
   </div>
@@ -1302,10 +1302,10 @@ function clearSecondaryHotkey() {
 // --- Init ---
 document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
-  refreshBackendStatus();
   await loadLlmConfig();
   await loadProcessingModes();
   await loadSecondaryHotkey();
+  // Backend status: only refresh on user click (refreshBackendStatus button)
 });
 </script>
 </body>
