@@ -156,24 +156,6 @@ body {
   letter-spacing: 1.2px; font-weight: 600; margin: 16px 0 8px;
 }
 
-.backend-status {
-  margin-top: 12px; padding: 12px 14px; background: #1f1f1f;
-  border: 1px solid #282828; border-radius: 8px;
-}
-.backend-status-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 4px 0; font-size: 13px;
-}
-.backend-status-row + .backend-status-row { border-top: 1px solid rgba(255,255,255,0.04); }
-.backend-status-label { color: #b3b3b3; }
-.backend-status-value { color: #fff; font-weight: 500; }
-.status-dot {
-  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-  margin-right: 6px; vertical-align: middle;
-}
-.status-dot.on { background: #1ed760; }
-.status-dot.off { background: #f3727f; }
-
 .status-bar {
   padding: 8px 24px;
   background: #1f1f1f;
@@ -413,7 +395,6 @@ body {
       <div class="setting-hint">本地后端或 OpenAI 兼容 API 地址</div></div>
       <div class="input-with-btn">
         <input class="text-input" id="backendUrlInput" value="https://api.openai.com/v1" onblur="saveConfig()">
-        <button class="rec-btn" onclick="refreshBackendStatus()" style="flex-shrink:0;">刷新</button>
       </div>
     </div>
 
@@ -446,13 +427,7 @@ body {
       </div>
     </div>
 
-    <div class="section-label">后端状态</div>
-    <div class="backend-status" id="backendStatus">
-      <div class="backend-status-row">
-        <span class="backend-status-label">连接状态</span>
-        <span class="backend-status-value" id="bsConn"><span class="status-dot off"></span>点击刷新检测</span>
-      </div>
-    </div>
+
   </div>
 
   <!-- ========== AI 处理 ========== -->
@@ -690,27 +665,6 @@ async function toggleEnabled() {
   const toggle = document.getElementById('toggleEnabled');
   toggle.classList.toggle('on');
   await saveConfig();
-}
-
-// --- Backend status ---
-async function refreshBackendStatus() {
-  const connEl = document.getElementById('bsConn');
-  connEl.innerHTML = '<span class="status-dot off"></span>检测中...';
-  try {
-    const result = await invoke('get_backend_status', {
-      backendUrl: document.getElementById('backendUrlInput').value.trim()
-    });
-    if (result.connected) {
-      connEl.innerHTML = '<span class="status-dot on"></span>已连接';
-      if (result.models && result.models.length > 0) {
-        allAsrModels = result.models;
-      }
-    } else {
-      connEl.innerHTML = '<span class="status-dot off"></span>未连接 — ' + (result.error || '未知错误');
-    }
-  } catch (e) {
-    connEl.innerHTML = '<span class="status-dot off"></span>查询失败 — ' + e;
-  }
 }
 
 // --- Hotkey recording (shared) ---
@@ -1305,7 +1259,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadLlmConfig();
   await loadProcessingModes();
   await loadSecondaryHotkey();
-  // Backend status: only refresh on user click (refreshBackendStatus button)
 });
 </script>
 </body>

@@ -160,20 +160,6 @@ pub fn save_config(
 }
 
 #[tauri::command]
-pub fn get_backend_status(backend_url: Option<String>) -> serde_json::Value {
-    let cfg = load_config();
-    let url = backend_url.unwrap_or_else(|| cfg.backend_url.clone());
-    let client = crate::asr::AsrClient::new(&url, &cfg.asr_api_key);
-    match client.health() {
-        Ok(()) => {
-            let models = client.list_models().unwrap_or_default();
-            serde_json::json!({"connected": true, "models": models})
-        }
-        Err(e) => serde_json::json!({"connected": false, "error": e.to_string()}),
-    }
-}
-
-#[tauri::command]
 pub fn fetch_asr_model_list() -> serde_json::Value {
     let cfg = load_config();
     let client = crate::asr::AsrClient::new(&cfg.backend_url, &cfg.asr_api_key);

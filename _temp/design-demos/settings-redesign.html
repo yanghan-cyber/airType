@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>AirType 设置页 — 热键录制器重设计</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #181818;
+  font-family: 'Segoe UI', -apple-system, sans-serif;
+  color: #fff;
+  padding: 32px;
+  min-height: 100vh;
+}
+
+/* ===== Page header ===== */
+.page-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 32px;
+}
+.page-header h1 { font-size: 20px; font-weight: 700; }
+.page-header .badge {
+  font-size: 11px; padding: 3px 10px; border-radius: 9999px;
+  background: rgba(29,217,96,0.12); color: #1ed760; font-weight: 600;
+}
+
+/* ===== Variant tabs ===== */
+.variant-tabs {
+  display: flex; gap: 4px; margin-bottom: 24px;
+  background: #1f1f1f; border-radius: 10px; padding: 4px;
+  width: fit-content;
+}
+.variant-tab {
+  padding: 8px 20px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; color: #b3b3b3;
+  cursor: pointer; transition: all 0.15s; border: none; background: none;
+}
+.variant-tab:hover { color: #fff; }
+.variant-tab.active { background: #1ed760; color: #000; }
+
+/* ===== Section ===== */
+.section {
+  margin-bottom: 40px;
+}
+.section-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+  color: #b3b3b3; font-weight: 600; margin-bottom: 16px;
+}
+.section-desc {
+  font-size: 13px; color: #535353; margin-bottom: 20px; line-height: 1.6;
+}
+
+/* ===== Settings container ===== */
+.settings-panel {
+  background: #1a1a1a; border-radius: 16px; padding: 0;
+  border: 1px solid rgba(255,255,255,0.06); overflow: hidden;
+  max-width: 580px;
+}
+.settings-panel .setting-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.settings-panel .setting-row:last-child { border-bottom: none; }
+.setting-label { font-size: 13px; color: #fff; font-weight: 500; }
+.setting-hint { font-size: 11px; color: #535353; margin-top: 2px; }
+
+/* ===== Shared recorder styles ===== */
+.key {
+  background: #1f1f1f; border: 1px solid #3a3a3a;
+  border-radius: 6px; padding: 4px 10px;
+  font-size: 12px; color: #fff; font-weight: 600;
+  white-space: nowrap;
+}
+.rec-btn {
+  background: #1f1f1f; border: 1px solid #3a3a3a;
+  border-radius: 6px; padding: 6px 12px;
+  color: #b3b3b3; font-size: 12px; cursor: pointer;
+  transition: all 0.15s; font-weight: 600; flex-shrink: 0;
+}
+.rec-btn:hover { border-color: #1ed760; color: #1ed760; }
+
+/* ===================== */
+/* VARIANT A: Current (broken) */
+/* ===================== */
+.variant { display: none; }
+.variant.active { display: block; }
+
+.v-a .hotkey-recorder {
+  display: flex; align-items: center; gap: 8px;
+}
+.v-a .key-caps { display: flex; align-items: center; gap: 4px; }
+
+/* ===================== */
+/* VARIANT B: Label column fix */
+/* ===================== */
+.v-b .setting-row.hotkey-row {
+  align-items: flex-start;
+  padding-top: 16px; padding-bottom: 16px;
+}
+.v-b .setting-label-col {
+  width: 130px; flex-shrink: 0;
+  padding-top: 2px;
+}
+.v-b .hotkey-recorder {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: nowrap; min-width: 0; flex: 1;
+  justify-content: flex-end;
+}
+.v-b .key-caps {
+  display: flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; min-width: 0;
+}
+.v-b .key-caps .key { flex-shrink: 0; }
+.v-b .key-caps .key-sep { color: #535353; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.v-b .clear-btn {
+  background: none; border: 1px solid #3a3a3a; border-radius: 6px;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  color: #535353; cursor: pointer; font-size: 13px; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.v-b .clear-btn:hover { border-color: #f3727f; color: #f3727f; }
+
+/* ===================== */
+/* VARIANT C: Full-width recorder row */
+/* ===================== */
+.v-c .setting-row.hotkey-row {
+  flex-direction: column; align-items: stretch; gap: 10px;
+}
+.v-c .setting-label-row {
+  display: flex; align-items: baseline; gap: 12px;
+}
+.v-c .hotkey-recorder {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: nowrap;
+}
+.v-c .key-caps {
+  display: flex; align-items: center; gap: 4px;
+  flex-wrap: nowrap; min-width: 0;
+}
+.v-c .key-caps .key { flex-shrink: 0; }
+.v-c .key-caps .key-sep { color: #535353; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.v-c .clear-btn {
+  background: none; border: 1px solid #3a3a3a; border-radius: 6px;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  color: #535353; cursor: pointer; font-size: 13px; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.v-c .clear-btn:hover { border-color: #f3727f; color: #f3727f; }
+.v-c .recorder-status {
+  font-size: 11px; color: #535353; margin-left: 4px; flex-shrink: 0;
+}
+
+/* ===================== */
+/* VARIANT D: Inline pill layout */
+/* ===================== */
+.v-d .setting-row.hotkey-row {
+  align-items: flex-start; padding-top: 16px; padding-bottom: 16px;
+}
+.v-d .setting-label-col {
+  width: 130px; flex-shrink: 0; padding-top: 2px;
+}
+.v-d .hotkey-recorder {
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: nowrap; min-width: 0; flex: 1;
+  justify-content: flex-end;
+}
+.v-d .key-caps {
+  display: flex; align-items: center;
+  background: #111; border: 1px solid #2a2a2a;
+  border-radius: 8px; padding: 5px 8px; gap: 4px;
+  flex-wrap: nowrap; min-width: 0;
+}
+.v-d .key-caps .key {
+  background: #222; border-color: #3a3a3a; padding: 3px 8px;
+}
+.v-d .key-caps .key-sep { color: #444; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.v-d .clear-btn {
+  background: none; border: 1px solid #2a2a2a; border-radius: 6px;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  color: #444; cursor: pointer; font-size: 13px; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.v-d .clear-btn:hover { border-color: #f3727f; color: #f3727f; }
+
+/* Recording state shared */
+.hotkey-recorder.recording {
+  /* nothing visual here, just the button */
+}
+.hotkey-recorder.recording .rec-btn {
+  border-color: #1ed760; background: rgba(29,217,96,0.08);
+  color: #1ed760; animation: recPulse 1.2s ease-in-out infinite;
+}
+.hotkey-recorder.recording .key-caps .key { opacity: 0.3; }
+@keyframes recPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(29,217,96,0.15); }
+  50% { box-shadow: 0 0 0 5px rgba(29,217,96,0); }
+}
+
+/* ===== Status bar ===== */
+.status-bar {
+  margin-top: 8px; padding: 8px 16px;
+  font-size: 11px; color: #535353;
+}
+.status-bar .dup-error { color: #f3727f; }
+.status-bar .saved { color: #1ed760; }
+
+/* ===== Annotations ===== */
+.anno {
+  margin-top: 16px; padding: 12px 14px;
+  background: rgba(29,217,96,0.04);
+  border-left: 3px solid #1ed760;
+  border-radius: 0 8px 8px 0;
+  font-size: 12px; color: #8e8e93; line-height: 1.6;
+}
+.anno strong { color: #1ed760; font-weight: 600; }
+.anno.problem { background: rgba(243,114,127,0.04); border-left-color: #f3727f; }
+.anno.problem strong { color: #f3727f; }
+
+/* ===== Separator ===== */
+.sep { height: 1px; background: rgba(255,255,255,0.06); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>AirType · 热键录制器重设计</h1>
+  <span class="badge">交互原型</span>
+</div>
+
+<div class="variant-tabs">
+  <button class="variant-tab active" data-variant="a">A · 现状（问题）</button>
+  <button class="variant-tab" data-variant="b">B · 固定标签列</button>
+  <button class="variant-tab" data-variant="c">C · 标签独立行</button>
+  <button class="variant-tab" data-variant="d">D · 药丸容器</button>
+</div>
+
+<!-- ============================== -->
+<!-- VARIANT A: Current (shows the problems) -->
+<!-- ============================== -->
+<div class="variant v-a active" id="variant-a">
+
+  <div class="anno problem">
+    <strong>问题 1 · 对齐错位</strong>：左侧标签文字长度不同（「录音快捷键」vs「AI 录音键」），<code>space-between</code> 让右侧录制器位置不一致。<br>
+    <strong>问题 2 · 挤压换行</strong>：录了 3+ 个键时 key-caps 过宽，录制按钮被挤到下一行竖排。<br>
+    <strong>问题 3 · 叉号不对齐</strong>：AI 录音键多一个 ✕ 清除按钮，和录音快捷键的录制按钮不在同一水平线。
+  </div>
+
+  <div class="section-title">语音输入</div>
+  <div class="settings-panel">
+    <!-- 录音快捷键 -->
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">录音快捷键</div>
+        <div class="setting-hint">点击录制，按下任意键或组合键</div>
+      </div>
+      <div class="hotkey-recorder">
+        <div class="key-caps" style="display:flex;gap:4px;align-items:center;">
+          <span class="key">LCtrl</span>
+          <span style="color:#535353;font-size:12px;font-weight:600">+</span>
+          <span class="key">LWin</span>
+        </div>
+        <button class="rec-btn">录制</button>
+      </div>
+    </div>
+    <!-- AI 录音键 — short combo -->
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">AI 录音键</div>
+        <div class="setting-hint">可选的额外快捷键，留空则不启用</div>
+      </div>
+      <div class="hotkey-recorder">
+        <div class="key-caps" style="display:flex;gap:4px;align-items:center;">
+          <span class="key">LCtrl</span>
+          <span style="color:#535353;font-size:12px;font-weight:600">+</span>
+          <span class="key">LAlt</span>
+          <span style="color:#535353;font-size:12px;font-weight:600">+</span>
+          <span class="key">A</span>
+        </div>
+        <button class="rec-btn">录制</button>
+        <button class="rec-btn" style="color:#535353">✕</button>
+      </div>
+    </div>
+    <!-- AI 录音键 — LONG combo (problem demo) -->
+    <div class="setting-row" style="border-bottom:none">
+      <div>
+        <div class="setting-label">AI 录音键（长组合演示）</div>
+        <div class="setting-hint">录了 4 个键 → 挤压换行</div>
+      </div>
+      <div class="hotkey-recorder" style="flex-wrap:wrap;">
+        <div class="key-caps" style="display:flex;gap:4px;align-items:center;">
+          <span class="key">LCtrl</span>
+          <span style="color:#535353;font-size:12px;font-weight:600">+</span>
+          <span class="key">LShift</span>
+          <span style="color:#535353;font-size:12px;font-weight:600">+</span>
+          <span class="key">LAlt</span>
+          <span style="color:#535353;font-size:12px;font-weight:600">+</span>
+          <span class="key">F6</span>
+        </div>
+        <button class="rec-btn">录制</button>
+        <button class="rec-btn" style="color:#535353">✕</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- VARIANT B: Fixed label column -->
+<!-- ============================== -->
+<div class="variant v-b" id="variant-b">
+
+  <div class="anno">
+    <strong>方案 B · 固定标签列宽</strong>：左侧 label 固定 130px，右侧录制器 <code>flex:1; justify-content:flex-end</code> 自动对齐。长组合时 key-caps 有 <code>min-width:0; overflow:hidden</code> 兜底。标签和录制器始终在同一水平线上。
+  </div>
+
+  <div class="section-title">语音输入</div>
+  <div class="settings-panel">
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-col">
+        <div class="setting-label">录音快捷键</div>
+        <div class="setting-hint">点击录制，按下任意键或组合键</div>
+      </div>
+      <div class="hotkey-recorder" id="b-primary">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LWin</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordB('b-primary')">录制</button>
+      </div>
+    </div>
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-col">
+        <div class="setting-label">AI 录音键</div>
+        <div class="setting-hint">可选的额外快捷键</div>
+      </div>
+      <div class="hotkey-recorder" id="b-secondary">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LAlt</span><span class="key-sep">+</span>
+          <span class="key">A</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordB('b-secondary')">录制</button>
+        <button class="clear-btn" title="清除">✕</button>
+      </div>
+    </div>
+    <div class="setting-row hotkey-row" style="border-bottom:none">
+      <div class="setting-label-col">
+        <div class="setting-label">AI 录音键（长组合）</div>
+        <div class="setting-hint">overflow 兜底</div>
+      </div>
+      <div class="hotkey-recorder" id="b-long">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LShift</span><span class="key-sep">+</span>
+          <span class="key">LAlt</span><span class="key-sep">+</span>
+          <span class="key">F6</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordB('b-long')">录制</button>
+        <button class="clear-btn" title="清除">✕</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- VARIANT C: Label on its own line -->
+<!-- ============================== -->
+<div class="variant v-c" id="variant-c">
+
+  <div class="anno">
+    <strong>方案 C · 标签独立行</strong>：标签 + hint 独占一行，录制器独占下一行并满宽。天然没有对齐问题，长组合也能完整展示。代价是每行更占垂直空间。
+  </div>
+
+  <div class="section-title">语音输入</div>
+  <div class="settings-panel">
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-row">
+        <div class="setting-label">录音快捷键</div>
+        <div class="setting-hint">点击录制，按下任意键或组合键</div>
+      </div>
+      <div class="hotkey-recorder" id="c-primary">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LWin</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordC('c-primary')">录制</button>
+        <span class="recorder-status"></span>
+      </div>
+    </div>
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-row">
+        <div class="setting-label">AI 录音键</div>
+        <div class="setting-hint">可选的额外快捷键</div>
+      </div>
+      <div class="hotkey-recorder" id="c-secondary">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LAlt</span><span class="key-sep">+</span>
+          <span class="key">A</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordC('c-secondary')">录制</button>
+        <button class="clear-btn" title="清除">✕</button>
+        <span class="recorder-status"></span>
+      </div>
+    </div>
+    <div class="setting-row hotkey-row" style="border-bottom:none">
+      <div class="setting-label-row">
+        <div class="setting-label">AI 录音键（长组合）</div>
+        <div class="setting-hint">4 个键也完全展示</div>
+      </div>
+      <div class="hotkey-recorder" id="c-long">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LShift</span><span class="key-sep">+</span>
+          <span class="key">LAlt</span><span class="key-sep">+</span>
+          <span class="key">F6</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordC('c-long')">录制</button>
+        <button class="clear-btn" title="清除">✕</button>
+        <span class="recorder-status"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== -->
+<!-- VARIANT D: Pill container -->
+<!-- ============================== -->
+<div class="variant v-d" id="variant-d">
+
+  <div class="anno">
+    <strong>方案 D · 药丸容器</strong>：key caps 包在一个深色药丸容器里，视觉上形成一个整体。和设置页其他控件（toggle、select）的「块状感」更统一。清除按钮紧贴药丸右侧。
+  </div>
+
+  <div class="section-title">语音输入</div>
+  <div class="settings-panel">
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-col">
+        <div class="setting-label">录音快捷键</div>
+        <div class="setting-hint">点击录制，按下任意键或组合键</div>
+      </div>
+      <div class="hotkey-recorder" id="d-primary">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LWin</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordD('d-primary')">录制</button>
+      </div>
+    </div>
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-col">
+        <div class="setting-label">AI 录音键</div>
+        <div class="setting-hint">可选的额外快捷键</div>
+      </div>
+      <div class="hotkey-recorder" id="d-secondary">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LAlt</span><span class="key-sep">+</span>
+          <span class="key">A</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordD('d-secondary')">录制</button>
+        <button class="clear-btn" title="清除">✕</button>
+      </div>
+    </div>
+    <div class="setting-row hotkey-row" style="border-bottom:none">
+      <div class="setting-label-col">
+        <div class="setting-label">AI 录音键（长组合）</div>
+        <div class="setting-hint">药丸自适应宽度</div>
+      </div>
+      <div class="hotkey-recorder" id="d-long">
+        <div class="key-caps">
+          <span class="key">LCtrl</span><span class="key-sep">+</span>
+          <span class="key">LShift</span><span class="key-sep">+</span>
+          <span class="key">LAlt</span><span class="key-sep">+</span>
+          <span class="key">F6</span>
+        </div>
+        <button class="rec-btn" onclick="toggleRecordD('d-long')">录制</button>
+        <button class="clear-btn" title="清除">✕</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar" id="statusBar">就绪 — 点击各方案的「录制」按钮体验交互</div>
+
+<script>
+// Tab switching
+document.querySelectorAll('.variant-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.variant-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('variant-' + tab.dataset.variant).classList.add('active');
+  });
+});
+
+// Recording simulation (shared logic)
+function codeToKeyName(code) {
+  const map = {
+    'ControlLeft': 'LCtrl', 'ControlRight': 'RCtrl',
+    'ShiftLeft': 'LShift', 'ShiftRight': 'RShift',
+    'AltLeft': 'LAlt', 'AltRight': 'RAlt',
+    'MetaLeft': 'LWin', 'MetaRight': 'RWin',
+    'Space': 'Space', 'Enter': 'Enter', 'Escape': 'Esc',
+    'Tab': 'Tab', 'Backspace': 'BS', 'Delete': 'Del',
+  };
+  if (map[code]) return map[code];
+  if (/^F(\d+)$/.test(code)) return code;
+  if (/^Key([A-Z])$/.test(code)) return code.replace('Key', '');
+  if (/^Digit(\d)$/.test(code)) return code.replace('Digit', '');
+  return null;
+}
+
+let activeRecorder = null;
+let pressedKeys = [];
+let pressedSet = new Set();
+
+function renderKeys(container, keys) {
+  container.innerHTML = keys.map((k, i) => {
+    let h = '<span class="key">' + k + '</span>';
+    if (i < keys.length - 1) h += '<span class="key-sep">+</span>';
+    return h;
+  }).join('');
+}
+
+function startRecording(recorderId) {
+  if (activeRecorder) stopRecording();
+  activeRecorder = recorderId;
+  pressedKeys = [];
+  pressedSet.clear();
+  const el = document.getElementById(recorderId);
+  el.classList.add('recording');
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+  setStatus('录制中 — 按下快捷键...');
+}
+
+function stopRecording() {
+  if (!activeRecorder) return;
+  document.getElementById(activeRecorder).classList.remove('recording');
+  activeRecorder = null;
+  document.removeEventListener('keydown', onKeyDown);
+  document.removeEventListener('keyup', onKeyUp);
+}
+
+function onKeyDown(e) {
+  e.preventDefault(); e.stopPropagation();
+  if (pressedSet.has(e.code)) return;
+  const name = codeToKeyName(e.code);
+  if (!name) return;
+  pressedSet.add(e.code);
+  pressedKeys.push(name);
+  const container = document.getElementById(activeRecorder).querySelector('.key-caps');
+  renderKeys(container, pressedKeys);
+}
+
+function onKeyUp(e) {
+  e.preventDefault(); e.stopPropagation();
+  pressedSet.delete(e.code);
+  if (pressedSet.size === 0 && pressedKeys.length > 0) {
+    const combo = pressedKeys.join('+');
+    pressedKeys = [];
+    stopRecording();
+    setStatus('已保存: ' + combo, 'saved');
+  }
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('statusBar');
+  el.innerHTML = cls ? '<span class="' + cls + '">' + msg + '</span>' : msg;
+}
+
+// Per-variant recording triggers
+function toggleRecordB(id) { activeRecorder === id ? stopRecording() : startRecording(id); }
+function toggleRecordC(id) { activeRecorder === id ? stopRecording() : startRecording(id); }
+function toggleRecordD(id) { activeRecorder === id ? stopRecording() : startRecording(id); }
+</script>
+</body>
+</html>

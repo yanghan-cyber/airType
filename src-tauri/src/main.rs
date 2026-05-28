@@ -75,7 +75,6 @@ fn main() {
             commands::get_config,
             commands::update_hotwords,
             commands::save_config,
-            commands::get_backend_status,
             commands::fetch_asr_model_list,
             commands::enter_position_mode,
             commands::save_capsule_position,
