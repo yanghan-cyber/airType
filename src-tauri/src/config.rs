@@ -405,24 +405,14 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_hotkey_single_key() {
+    fn test_parse_hotkey_empty_rejected() {
+        let cfg = AppConfig { hotkey: "".to_string(), ..Default::default() };
+        assert!(cfg.parse_hotkey().is_err());
+        // Single key should be accepted
         let cfg = AppConfig { hotkey: "F6".to_string(), ..Default::default() };
         let (mods, key) = cfg.parse_hotkey().unwrap();
         assert!(mods.is_empty());
         assert_eq!(key, "F6");
-    }
-
-    #[test]
-    fn test_parse_hotkey_single_key_rejected() {
-        // Empty hotkey should be rejected
-        let cfg = AppConfig { hotkey: "".to_string(), ..Default::default() };
-        assert!(cfg.parse_hotkey().is_err());
-    }
-
-    #[test]
-    fn test_parse_hotkey_empty_rejected() {
-        let cfg = AppConfig { hotkey: "".to_string(), ..Default::default() };
-        assert!(cfg.parse_hotkey().is_err());
     }
 
     #[test]

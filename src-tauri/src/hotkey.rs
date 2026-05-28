@@ -28,51 +28,29 @@ impl HotkeyConfig {
     }
 
     pub fn from_string(s: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = s.split('+').collect();
-        if parts.is_empty() || parts.iter().all(|p| p.trim().is_empty()) {
+        let parts: Vec<&str> = s.split('+').filter(|p| !p.trim().is_empty()).collect();
+        if parts.is_empty() {
             return Err("Hotkey cannot be empty".to_string());
         }
-        if parts.len() == 1 {
-            // Single key hotkey
-            let main_key = parse_key_name(parts[0])?;
-            Ok(Self {
-                modifiers: vec![],
-                main_key,
-                debounce_ms: 100,
-                max_hold_secs: 30,
-            })
-        } else {
-            let mut modifiers = Vec::new();
-            for part in &parts[..parts.len() - 1] {
-                modifiers.push(parse_key_name(part)?);
-            }
-            let main_key = parse_key_name(parts.last().unwrap())?;
-            Ok(Self {
-                modifiers,
-                main_key,
-                debounce_ms: 100,
-                max_hold_secs: 30,
-            })
+        let main_key = parse_key_name(parts.last().unwrap())?;
+        let mut modifiers = Vec::new();
+        for part in &parts[..parts.len() - 1] {
+            modifiers.push(parse_key_name(part)?);
         }
+        Ok(Self { modifiers, main_key, debounce_ms: 100, max_hold_secs: 30 })
     }
 }
 
 fn parse_key_name(name: &str) -> Result<Key, String> {
     match name {
-        // Left-side modifiers
         "LCtrl" | "Ctrl" => Ok(Key::ControlLeft),
-        "LAlt" => Ok(Key::Alt),
-        "LShift" => Ok(Key::ShiftLeft),
-        "LWin" | "LMeta" => Ok(Key::MetaLeft),
-        // Right-side modifiers
         "RCtrl" => Ok(Key::ControlRight),
-        "RAlt" => Ok(Key::AltGr),
+        "LShift" | "Shift" => Ok(Key::ShiftLeft),
         "RShift" => Ok(Key::ShiftRight),
+        "LAlt" | "Alt" => Ok(Key::Alt),
+        "RAlt" => Ok(Key::AltGr),
+        "LWin" | "LMeta" | "Win" | "Meta" => Ok(Key::MetaLeft),
         "RWin" | "RMeta" => Ok(Key::MetaRight),
-        // Generic modifiers (map to left)
-        "Alt" => Ok(Key::Alt),
-        "Shift" => Ok(Key::ShiftLeft),
-        "Win" | "Meta" => Ok(Key::MetaLeft),
         "Space" => Ok(Key::Space),
         "Return" | "Enter" => Ok(Key::Return),
         "Escape" | "Esc" => Ok(Key::Escape),
@@ -302,14 +280,10 @@ mod tests {
     }
 
     #[test]
-    fn test_hotkey_config_from_string_single_key_rejected() {
-        // Empty string should still be rejected
-        assert!(HotkeyConfig::from_string("").is_err());
-    }
-
-    #[test]
     fn test_hotkey_config_from_string_empty_rejected() {
         assert!(HotkeyConfig::from_string("").is_err());
+        // Single space-only parts should also be rejected
+        assert!(HotkeyConfig::from_string("  ").is_err());
     }
 
     #[test]

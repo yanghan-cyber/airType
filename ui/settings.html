@@ -871,12 +871,12 @@ async function resetPosition() {
 }
 
 // --- Inline toast (shows near target element) ---
-toastTimers = {};
+const _toastTimers = {};
 function showToast(targetId, msg, isError) {
   // Remove existing toast for this target
   const existing = document.getElementById('toast-' + targetId);
   if (existing) existing.remove();
-  clearTimeout(toastTimers[targetId]);
+  clearTimeout(_toastTimers[targetId]);
 
   const target = document.getElementById(targetId);
   if (!target) return;
@@ -894,7 +894,7 @@ function showToast(targetId, msg, isError) {
     parent.appendChild(toast);
   }
 
-  toastTimers[targetId] = setTimeout(() => toast.remove(), 3000);
+  _toastTimers[targetId] = setTimeout(() => toast.remove(), 3000);
 }
 
 // --- LLM Config (AI 处理 Tab) ---
