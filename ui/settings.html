@@ -27,7 +27,7 @@ body {
   font-size: 13px; font-weight: 600; color: #b3b3b3;
   cursor: pointer; border-bottom: 2px solid transparent;
   transition: color 0.2s, border-color 0.2s;
-  letter-spacing: 0.5px; text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 .tab:hover { color: #fff; }
 .tab.active { color: #1ed760; border-bottom-color: #1ed760; }
@@ -80,8 +80,6 @@ body {
   50% { box-shadow: 0 0 0 6px rgba(29,217,96,0); }
 }
 
-
-.hotword-input-wrap { display: flex; gap: 8px; margin-top: 12px; }
 .text-input {
   background: #1f1f1f;
   border: none;
@@ -98,18 +96,12 @@ body {
 }
 .text-input::placeholder { color: #535353; }
 
-/* Short input layout (label left, input right, one line) */
-.setting-row.short-input {
-  align-items: center;
-}
-.setting-row.short-input .text-input {
-  text-align: center;
-}
+.setting-row.short-input { align-items: center; }
+.setting-row.short-input .text-input { text-align: center; }
 .input-short { width: 120px; }
 .input-short-num { width: 80px; }
 .input-short-tokens { width: 100px; }
 
-/* Long input layout (label top, input below, full width) */
 .setting-row.long-input {
   flex-direction: column;
   align-items: stretch;
@@ -123,13 +115,16 @@ body {
 .setting-row.long-input .input-with-btn .text-input {
   flex: 1;
 }
+
 .btn-add {
   background: #1ed760; color: #000; border: none;
   border-radius: 6px; padding: 8px 14px;
   font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .btn-add:hover { background: #1db954; }
-.hotword-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+.hotword-input-wrap { display: flex; gap: 8px; margin-top: 12px; }
+.hotword-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .tag {
   display: flex; align-items: center; gap: 6px;
   background: #1f1f1f; border: 1px solid #282828;
@@ -272,7 +267,6 @@ body {
 }
 .modal-actions .btn-save:hover { background: #1aec6a; }
 
-/* Confirm dialog (delete mode) */
 .confirm-modal {
   background: #282828;
   box-shadow: rgba(0,0,0,0.5) 0px 8px 24px;
@@ -329,7 +323,6 @@ body {
 }
 .confirm-actions .btn-delete:hover { background: #e05566; }
 
-/* Mode popup config */
 .mode-config-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 12px; background: #1f1f1f; border: 1px solid #282828;
@@ -359,15 +352,14 @@ body {
 <body>
 
 <div class="tab-bar">
-  <div class="tab active" data-tab="general">通用</div>
-  <div class="tab" data-tab="hotwords">热词</div>
-  <div class="tab" data-tab="advanced">高级</div>
-  <div class="tab" data-tab="ai">AI</div>
+  <div class="tab active" data-tab="voice">🎙️ 语音输入</div>
+  <div class="tab" data-tab="ai">🤖 AI 处理</div>
+  <div class="tab" data-tab="ui">🎨 界面</div>
 </div>
 
 <div class="tab-content">
-  <!-- General -->
-  <div class="tab-panel active" id="panel-general">
+  <!-- ========== 语音输入 ========== -->
+  <div class="tab-panel active" id="panel-voice">
     <div class="setting-row">
       <div>
         <div class="setting-label">启用语音输入</div>
@@ -389,78 +381,33 @@ body {
       </div>
     </div>
 
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">AI 录音键</div>
+        <div class="setting-hint">可选的额外快捷键，留空则不启用</div>
+      </div>
+      <div class="hotkey-recorder" id="secondaryRecorder">
+        <span class="key" id="secondaryKeyDisplay">未设置</span>
+        <button class="rec-btn" id="secondaryRecBtn" onclick="toggleSecondaryRecord()">录制</button>
+        <button class="rec-btn" onclick="clearSecondaryHotkey()" title="清除">✕</button>
+      </div>
+    </div>
+
     <div class="setting-row short-input">
       <div>
         <div class="setting-label">识别语言</div>
-        <div class="setting-hint">ISO-639-1 格式，如 zh、en、ja，留空自动检测</div>
+        <div class="setting-hint">ISO-639-1 格式，留空自动检测</div>
       </div>
-      <input class="text-input input-short" id="langSelect" placeholder="自动检测" onchange="saveConfig()">
+      <input class="text-input input-short" id="langSelect" placeholder="自动检测" onblur="saveConfig()">
     </div>
 
-    <div class="section-label">AI 后处理</div>
-    <div class="setting-row">
-      <div>
-        <div class="setting-label">处理模式</div>
-        <div class="setting-hint">选择语音识别后的文本处理方式</div>
-      </div>
-      <select class="select-input" id="processingModeSelect" onchange="saveProcessingMode()"></select>
-    </div>
+    <div class="section-label">ASR 后端</div>
 
-    <div class="section-label">胶囊位置</div>
-    <div class="setting-row">
-      <div>
-        <div class="setting-label">默认位置</div>
-        <div class="setting-hint">未手动调整时的显示位置</div>
-      </div>
-      <div>
-        <select class="select-input" id="capsulePosSelect" onchange="saveCapsuleDefaults()">
-          <option value="bottom">底部居中</option>
-          <option value="top">顶部居中</option>
-        </select>
-      </div>
-    </div>
-    <div class="setting-row short-input">
-      <div>
-        <div class="setting-label">距边缘偏移</div>
-        <div class="setting-hint">距离屏幕边缘的距离（像素）</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <input class="text-input input-short-num" id="capsuleOffsetInput" type="number" value="70" min="0" max="500" onchange="saveCapsuleDefaults()">
-        <span style="color:#535353;font-size:12px;">px</span>
-      </div>
-    </div>
-    <div class="setting-row">
-      <div>
-        <div class="setting-label">自定义位置</div>
-        <div class="setting-hint">弹出胶囊并拖拽到目标位置</div>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="rec-btn" onclick="enterPositionMode()">调整位置</button>
-        <button class="rec-btn" onclick="resetPosition()">恢复默认</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Hotwords -->
-  <div class="tab-panel" id="panel-hotwords">
-    <div class="setting-label">热词列表</div>
-    <div class="setting-hint" style="margin-bottom:4px">添加专有名词、术语，提高识别准确率</div>
-
-    <div class="hotword-tags" id="tagList"></div>
-
-    <div class="hotword-input-wrap">
-      <input class="text-input" id="hwInput" placeholder="输入新热词，回车添加" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag();}">
-      <button class="btn-add" onclick="addTag()">添加</button>
-    </div>
-  </div>
-
-  <!-- Advanced -->
-  <div class="tab-panel" id="panel-advanced">
     <div class="setting-row long-input">
       <div><div class="setting-label">后端地址</div>
-      <div class="setting-hint">本地后端或 OpenAI 兼容 API 地址（如 Groq）</div></div>
+      <div class="setting-hint">本地后端或 OpenAI 兼容 API 地址</div></div>
       <div class="input-with-btn">
-        <input class="text-input" id="backendUrlInput" value="https://api.openai.com/v1" onchange="saveConfig()">
+        <input class="text-input" id="backendUrlInput" value="https://api.openai.com/v1" onblur="saveConfig()">
         <button class="rec-btn" onclick="refreshBackendStatus()" style="flex-shrink:0;">刷新</button>
       </div>
     </div>
@@ -469,7 +416,7 @@ body {
       <div><div class="setting-label">API Key</div>
       <div class="setting-hint">云端服务需要填写，本地后端留空</div></div>
       <div class="input-with-btn">
-        <input class="text-input" id="asrApiKeyInput" type="password" placeholder="留空则不发送认证" onchange="saveConfig()">
+        <input class="text-input" id="asrApiKeyInput" type="password" placeholder="留空则不发送认证" onblur="saveConfig()">
         <button class="rec-btn" onclick="toggleAsrApiKeyVisibility()" title="显示/隐藏">👁</button>
       </div>
     </div>
@@ -478,9 +425,19 @@ body {
       <div><div class="setting-label">ASR 模型</div>
       <div class="setting-hint">转录使用的模型名称</div></div>
       <div class="input-with-btn" style="position:relative;">
-        <input class="text-input" id="asrModelInput" placeholder="输入或选择模型" autocomplete="off" onfocus="showAsrModelDropdown()" oninput="filterAsrModels()" onchange="saveConfig()">
+        <input class="text-input" id="asrModelInput" placeholder="输入或选择模型" autocomplete="off" onfocus="showAsrModelDropdown()" oninput="filterAsrModels()" onblur="saveConfig()">
         <div id="asrModelDropdown" style="display:none;position:absolute;top:100%;left:0;right:50px;background:#1f1f1f;border:1px solid #4d4d4d;border-radius:6px;max-height:200px;overflow-y:auto;z-index:50;margin-top:4px;"></div>
         <button class="rec-btn" onclick="fetchAsrModels()" title="刷新模型列表" style="flex-shrink:0;">刷新</button>
+      </div>
+    </div>
+
+    <div class="setting-row long-input">
+      <div><div class="setting-label">热词</div>
+      <div class="setting-hint">添加专有名词、术语，提高识别准确率</div></div>
+      <div class="hotword-tags" id="tagList"></div>
+      <div class="hotword-input-wrap">
+        <input class="text-input" id="hwInput" placeholder="输入新热词，回车添加" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag();}">
+        <button class="btn-add" onclick="addTag()">添加</button>
       </div>
     </div>
 
@@ -493,74 +450,113 @@ body {
     </div>
   </div>
 
-  <!-- AI -->
+  <!-- ========== AI 处理 ========== -->
   <div class="tab-panel" id="panel-ai">
-    <div class="section-label">LLM 连接配置</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">默认处理模式</div>
+        <div class="setting-hint">录音结束后的默认处理方式</div>
+      </div>
+      <select class="select-input" id="processingModeSelect" onchange="saveProcessingMode()"></select>
+    </div>
+
+    <div class="section-label">LLM 连接</div>
+
     <div class="setting-row long-input">
       <div>
         <div class="setting-label">Base URL</div>
         <div class="setting-hint">OpenAI 兼容 API 地址</div>
       </div>
-      <input class="text-input" id="llmBaseUrl" value="https://api.openai.com/v1" onchange="saveLlmConfig()">
+      <input class="text-input" id="llmBaseUrl" value="https://api.openai.com/v1" onblur="saveLlmConfig()">
     </div>
+
     <div class="setting-row long-input">
       <div>
         <div class="setting-label">API Key</div>
       </div>
       <div class="input-with-btn">
-        <input class="text-input" id="llmApiKey" type="password" placeholder="sk-..." onchange="saveLlmConfig()">
+        <input class="text-input" id="llmApiKey" type="password" placeholder="sk-..." onblur="saveLlmConfig()">
         <button class="rec-btn" onclick="toggleApiKeyVisibility()" title="显示/隐藏">👁</button>
       </div>
     </div>
+
     <div class="setting-row long-input">
       <div>
         <div class="setting-label">模型</div>
       </div>
       <div class="input-with-btn" style="position:relative;">
-        <input class="text-input" id="llmModel" placeholder="输入或选择模型" autocomplete="off" onfocus="showLlmModelDropdown()" oninput="filterLlmModels()" onchange="saveLlmConfig()">
+        <input class="text-input" id="llmModel" placeholder="输入或选择模型" autocomplete="off" onfocus="showLlmModelDropdown()" oninput="filterLlmModels()" onblur="saveLlmConfig()">
         <div id="llmModelDropdown" style="display:none;position:absolute;top:100%;left:0;right:50px;background:#1f1f1f;border:1px solid #4d4d4d;border-radius:6px;max-height:200px;overflow-y:auto;z-index:50;margin-top:4px;"></div>
         <button class="rec-btn" onclick="fetchModels()" title="刷新模型列表">刷新</button>
       </div>
     </div>
+
     <div class="setting-row short-input">
       <div>
         <div class="setting-label">Temperature</div>
       </div>
-      <input class="text-input input-short-num" id="llmTemperature" type="number" value="0.7" min="0" max="2" step="0.1" onchange="onTemperatureChange()">
+      <input class="text-input input-short-num" id="llmTemperature" type="number" value="0.7" min="0" max="2" step="0.1" onblur="onTemperatureChange()">
     </div>
+
     <div class="setting-row short-input">
       <div>
         <div class="setting-label">Max Tokens</div>
       </div>
-      <input class="text-input input-short-tokens" id="llmMaxTokens" type="number" value="4096" min="1" max="128000" onchange="saveLlmConfig()">
+      <input class="text-input input-short-tokens" id="llmMaxTokens" type="number" value="4096" min="1" max="128000" onblur="saveLlmConfig()">
     </div>
+
     <div style="margin-top:10px;">
       <button class="rec-btn" onclick="testLlmConnection()">测试连接</button>
       <span id="llmTestResult" style="margin-left:10px;font-size:12px;color:#535353;"></span>
     </div>
 
     <div class="section-label">请求参数</div>
-    <div class="setting-hint" style="margin-bottom:8px;">发送给 LLM 的额外 JSON 参数（如 <code>reasoning_effort</code>）</div>
-    <textarea class="text-input" id="llmExtraParams" rows="3" placeholder='{"reasoning_effort":"none"}' style="width:100%;min-height:60px;font-family:monospace;font-size:12px;resize:vertical;" onchange="saveLlmConfig()"></textarea>
-
-    <div class="section-label">第二热键</div>
-    <div class="setting-row">
-      <div>
-        <div class="setting-label">第二录音热键</div>
-        <div class="setting-hint">可选的额外快捷键，留空则不启用</div>
-      </div>
-      <div class="hotkey-recorder" id="secondaryRecorder">
-        <span class="key" id="secondaryKeyDisplay">未设置</span>
-        <button class="rec-btn" id="secondaryRecBtn" onclick="toggleSecondaryRecord()">录制</button>
-        <button class="rec-btn" onclick="clearSecondaryHotkey()" title="清除">✕</button>
-      </div>
-    </div>
+    <div class="setting-hint" style="margin-bottom:8px;">发送给 LLM 的额外 JSON 参数</div>
+    <textarea class="text-input" id="llmExtraParams" rows="3" placeholder='{"reasoning_effort":"none"}' style="width:100%;min-height:60px;font-family:monospace;font-size:12px;resize:vertical;" onblur="saveLlmConfig()"></textarea>
 
     <div class="section-label">提示词管理</div>
-    <div class="setting-hint" style="margin-bottom:8px;">用 ▲▼ 调整顺序，前 3 项自动显示在 AI 语音键弹窗中，其余在"更多"面板中</div>
+    <div class="setting-hint" style="margin-bottom:8px;">用 ▲▼ 调整顺序，前 3 项自动显示在 AI 录音键弹窗中</div>
     <div id="modeList"></div>
     <div style="margin-top:10px;">
       <button class="btn-add" onclick="addNewMode()">+ 添加新模式</button>
+    </div>
+  </div>
+
+  <!-- ========== 界面 ========== -->
+  <div class="tab-panel" id="panel-ui">
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">默认位置</div>
+        <div class="setting-hint">未手动调整时的显示位置</div>
+      </div>
+      <div>
+        <select class="select-input" id="capsulePosSelect" onchange="saveCapsuleDefaults()">
+          <option value="bottom">底部居中</option>
+          <option value="top">顶部居中</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-row short-input">
+      <div>
+        <div class="setting-label">距边缘偏移</div>
+        <div class="setting-hint">距离屏幕边缘的距离（像素）</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input class="text-input input-short-num" id="capsuleOffsetInput" type="number" value="70" min="0" max="500" onblur="saveCapsuleDefaults()">
+        <span style="color:#535353;font-size:12px;">px</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">自定义位置</div>
+        <div class="setting-hint">弹出胶囊并拖拽到目标位置</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="rec-btn" onclick="enterPositionMode()">调整位置</button>
+        <button class="rec-btn" onclick="resetPosition()">恢复默认</button>
+      </div>
     </div>
   </div>
 </div>
@@ -603,7 +599,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
-    // Only refresh backend status when user explicitly clicks the refresh button
   });
 });
 
@@ -650,7 +645,7 @@ function applyConfig(cfg) {
   tagList.innerHTML = '';
   (cfg.hotwords || []).forEach(word => appendTag(word));
 
-  // Advanced
+  // ASR backend
   if (cfg.backend_url) document.getElementById('backendUrlInput').value = cfg.backend_url;
   if (cfg.asr_api_key) document.getElementById('asrApiKeyInput').value = cfg.asr_api_key;
   if (cfg.model) document.getElementById('asrModelInput').value = cfg.model;
@@ -658,10 +653,9 @@ function applyConfig(cfg) {
   // Capsule position
   if (cfg.capsule_default_position) document.getElementById('capsulePosSelect').value = cfg.capsule_default_position;
   if (cfg.capsule_default_offset != null) document.getElementById('capsuleOffsetInput').value = cfg.capsule_default_offset;
-
 }
 
-// --- Save config ---
+// --- Save config (语音输入 Tab) ---
 async function saveConfig() {
   const cfg = {
     enabled: document.getElementById('toggleEnabled').classList.contains('on'),
@@ -707,6 +701,7 @@ async function refreshBackendStatus() {
     connEl.innerHTML = '<span class="status-dot off"></span>查询失败 — ' + e;
   }
 }
+
 // --- Hotkey recording ---
 let recording = false;
 
@@ -741,7 +736,6 @@ function captureKey(e) {
   if (e.metaKey) mods.push('Win');
   if (mods.length === 0) return;
 
-  // Allow modifier-only combos (e.g. Ctrl+Win)
   if (['Control','Alt','Shift','Meta'].includes(e.key)) {
     if (mods.length >= 2) {
       document.getElementById('key1').textContent = mods[0];
@@ -754,7 +748,6 @@ function captureKey(e) {
 
   const keyName = e.key.length === 1 ? e.key.toUpperCase() : e.key;
   mods.push(keyName);
-
   if (mods.length >= 2) {
     document.getElementById('key1').textContent = mods[0];
     document.getElementById('key2').textContent = mods[1];
@@ -796,14 +789,14 @@ function addTag() {
   saveConfig();
 }
 
-// --- Capsule position ---
+// --- Capsule position (界面 Tab) ---
 async function saveCapsuleDefaults() {
   try {
     await invoke('save_capsule_default_position', {
       position: document.getElementById('capsulePosSelect').value,
       offset: parseInt(document.getElementById('capsuleOffsetInput').value) || 70,
     });
-    setStatus('位置设置已保存');
+    setStatus('已保存');
   } catch (e) {
     setStatus('保存失败: ' + e);
   }
@@ -812,7 +805,7 @@ async function saveCapsuleDefaults() {
 async function enterPositionMode() {
   try {
     await invoke('enter_position_mode');
-    setStatus('拖拽胶囊到目标位置，然后点击胶囊上的「确认」按钮');
+    setStatus('拖拽胶囊到目标位置，然后点击确认');
   } catch (e) {
     setStatus('操作失败: ' + e);
   }
@@ -832,7 +825,7 @@ function setStatus(msg) {
   document.getElementById('statusBar').textContent = msg;
 }
 
-// --- LLM Config ---
+// --- LLM Config (AI 处理 Tab) ---
 async function loadLlmConfig() {
   try {
     const cfg = await invoke('get_llm_config');
@@ -858,7 +851,7 @@ async function saveLlmConfig() {
       maxTokens: parseInt(document.getElementById('llmMaxTokens').value) || null,
       extraParams: extraParamsStr || null,
     });
-    setStatus('LLM 配置已保存');
+    setStatus('已保存');
   } catch (e) {
     setStatus('保存失败: ' + e);
   }
@@ -885,7 +878,7 @@ async function fetchAsrModels() {
     const result = await invoke('fetch_asr_model_list');
     if (result.success && result.models) {
       allAsrModels = result.models.sort();
-      setStatus('已加载 ' + allAsrModels.length + ' 个 ASR 模型，点击输入框可选择');
+      setStatus('已加载 ' + allAsrModels.length + ' 个 ASR 模型');
     } else {
       setStatus('获取模型列表失败: ' + (result.error || ''));
     }
@@ -920,7 +913,6 @@ function renderDropdown(dropdownId, inputId, models, filter) {
   const el = document.getElementById(dropdownId);
   const inputEl = document.getElementById(inputId);
   const val = (filter || inputEl.value).toLowerCase();
-  // Matched first, then unmatched
   const matched = models.filter(m => m.toLowerCase().includes(val));
   const unmatched = models.filter(m => !m.toLowerCase().includes(val));
   const sorted = val ? [...matched, ...unmatched] : models;
@@ -940,7 +932,7 @@ function renderDropdown(dropdownId, inputId, models, filter) {
       e.preventDefault();
       inputEl.value = m;
       el.style.display = 'none';
-      inputEl.dispatchEvent(new Event('change'));
+      inputEl.dispatchEvent(new Event('blur'));
     });
     opt.addEventListener('mouseenter', () => { opt.style.background = '#282828'; });
     opt.addEventListener('mouseleave', () => { opt.style.background = ''; });
@@ -959,7 +951,7 @@ async function fetchModels() {
     const result = await invoke('fetch_model_list');
     if (result.success && result.models) {
       allLlmModels = result.models.sort();
-      setStatus('已加载 ' + allLlmModels.length + ' 个模型，点击输入框可选择');
+      setStatus('已加载 ' + allLlmModels.length + ' 个模型');
     } else {
       setStatus('获取模型列表失败: ' + (result.error || ''));
     }
@@ -968,21 +960,19 @@ async function fetchModels() {
   }
 }
 
-// --- Processing Modes ---
+// --- Processing Modes (AI 处理 Tab) ---
 async function loadProcessingModes() {
   try {
     const modes = await invoke('get_processing_modes');
     const defaultModeId = await invoke('get_default_processing_mode');
 
-    // Populate processing mode select in General tab
+    // Populate processing mode select
     const sel = document.getElementById('processingModeSelect');
     sel.innerHTML = '';
-    // Add "skip AI" option
     const skipOpt = document.createElement('option');
     skipOpt.value = 'direct';
     skipOpt.textContent = '跳过 AI（直接注入）';
     sel.appendChild(skipOpt);
-    // Add other modes
     modes.forEach(m => {
       if (m.id !== 'direct') {
         const opt = document.createElement('option');
@@ -993,7 +983,7 @@ async function loadProcessingModes() {
     });
     if (defaultModeId) sel.value = defaultModeId;
 
-    // Populate mode list in AI tab (exclude direct, sort by popup_order)
+    // Populate mode list (exclude direct, sort by popup_order)
     const aiModes = modes.filter(m => m.id !== 'direct');
     aiModes.sort((a, b) => (a.popup_order || 999) - (b.popup_order || 999));
 
@@ -1026,7 +1016,7 @@ async function saveProcessingMode() {
   try {
     const modeId = document.getElementById('processingModeSelect').value;
     await invoke('save_default_processing_mode', { modeId });
-    setStatus('处理模式已保存');
+    setStatus('已保存');
   } catch (e) {
     setStatus('保存失败: ' + e);
   }
@@ -1067,7 +1057,7 @@ async function confirmDelete(modeId) {
   closeDeleteConfirm();
   try {
     await invoke('delete_processing_mode', { modeId });
-    setStatus('已删除提示词');
+    setStatus('已删除');
     loadProcessingModes();
   } catch (e) {
     setStatus('删除失败: ' + e);
@@ -1110,7 +1100,6 @@ function closeModeModal() {
 
 async function saveModeModal() {
   const modeId = document.getElementById('modalModeId').value;
-  // Preserve existing show_in_popup and popup_order when editing
   let showInPopup = false;
   let popupOrder = 0;
   try {
@@ -1134,7 +1123,7 @@ async function saveModeModal() {
   try {
     await invoke('save_processing_mode', { mode });
     closeModeModal();
-    setStatus('提示词已保存');
+    setStatus('已保存');
     loadProcessingModes();
   } catch (e) {
     setStatus('保存失败: ' + e);
@@ -1153,25 +1142,23 @@ async function moveMode(modeId, direction) {
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= aiModes.length) return;
 
-    // Swap popup_order between the two items
     const tmp = aiModes[idx].popup_order;
     aiModes[idx].popup_order = aiModes[newIdx].popup_order;
     aiModes[newIdx].popup_order = tmp;
 
-    // Reassign show_in_popup based on sorted order
     aiModes.sort((a, b) => (a.popup_order || 999) - (b.popup_order || 999));
     for (let i = 0; i < aiModes.length; i++) {
       aiModes[i].show_in_popup = i < 3;
       await invoke('save_processing_mode', { mode: aiModes[i] });
     }
     loadProcessingModes();
-    setStatus('模式顺序已保存');
+    setStatus('已保存');
   } catch (e) {
     setStatus('排序失败: ' + e);
   }
 }
 
-// --- Secondary Hotkey ---
+// --- Secondary Hotkey (AI 录音键) ---
 let secondaryRecording = false;
 
 function toggleSecondaryRecord() {
@@ -1224,7 +1211,7 @@ function captureSecondaryKey(e) {
 async function saveSecondaryHotkey(hotkey) {
   try {
     await invoke('save_secondary_hotkey', { hotkey });
-    setStatus('第二热键已保存');
+    setStatus('已保存');
   } catch (e) {
     setStatus('保存失败: ' + e);
   }
