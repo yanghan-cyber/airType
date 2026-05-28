@@ -61,12 +61,19 @@ body {
   font-size: 12px; color: #fff; font-weight: 600;
 }
 
-.hotkey-recorder { display: flex; align-items: center; gap: 8px; }
+.hotkey-recorder { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.key-caps { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; min-width: 0; }
+.key-caps .key-sep { color: #535353; font-size: 12px; font-weight: 600; user-select: none; flex-shrink: 0; }
+.key-caps .key { flex-shrink: 0; }
+.hotkey-row { flex-direction: column; align-items: stretch; gap: 8px; }
+.hotkey-row .setting-label-row { display: flex; align-items: baseline; gap: 12px; }
+.hotkey-row .setting-label { flex-shrink: 0; }
+.hotkey-row .setting-hint { margin-top: 0; }
 .rec-btn {
   background: #1f1f1f; border: 1px solid #4d4d4d;
   border-radius: 6px; padding: 6px 12px;
   color: #b3b3b3; font-size: 12px; cursor: pointer;
-  transition: all 0.2s; font-weight: 600;
+  transition: all 0.2s; font-weight: 600; flex-shrink: 0;
 }
 .rec-btn:hover { border-color: #1ed760; color: #1ed760; }
 
@@ -74,7 +81,7 @@ body {
   border-color: #1ed760; background: rgba(29,217,96,0.1);
   color: #1ed760; animation: recPulse 1s ease-in-out infinite;
 }
-.hotkey-recorder.recording .key { opacity: 0.3; }
+.hotkey-recorder.recording .key-caps .key { opacity: 0.3; }
 @keyframes recPulse {
   0%,100% { box-shadow: 0 0 0 0 rgba(29,217,96,0.2); }
   50% { box-shadow: 0 0 0 6px rgba(29,217,96,0); }
@@ -368,26 +375,24 @@ body {
       <div class="toggle on" id="toggleEnabled" onclick="toggleEnabled()"></div>
     </div>
 
-    <div class="setting-row">
-      <div>
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-row">
         <div class="setting-label">录音快捷键</div>
-        <div class="setting-hint">按下新组合键替换</div>
+        <div class="setting-hint">点击录制，按下任意键或组合键</div>
       </div>
       <div class="hotkey-recorder" id="recorder">
-        <span class="key" id="key1">Ctrl</span>
-        <span style="color:#535353">+</span>
-        <span class="key" id="key2">Win</span>
+        <div class="key-caps" id="primaryKeys"></div>
         <button class="rec-btn" id="recBtn" onclick="toggleRecord()">录制</button>
       </div>
     </div>
 
-    <div class="setting-row">
-      <div>
+    <div class="setting-row hotkey-row">
+      <div class="setting-label-row">
         <div class="setting-label">AI 录音键</div>
         <div class="setting-hint">可选的额外快捷键，留空则不启用</div>
       </div>
       <div class="hotkey-recorder" id="secondaryRecorder">
-        <span class="key" id="secondaryKeyDisplay">未设置</span>
+        <div class="key-caps" id="secondaryKeys"></div>
         <button class="rec-btn" id="secondaryRecBtn" onclick="toggleSecondaryRecord()">录制</button>
         <button class="rec-btn" onclick="clearSecondaryHotkey()" title="清除">✕</button>
       </div>
@@ -631,11 +636,9 @@ function applyConfig(cfg) {
   else toggle.classList.add('on');
 
   // Hotkey display
-  const parts = (cfg.hotkey || 'Ctrl+Win').split('+');
-  if (parts.length >= 2) {
-    document.getElementById('key1').textContent = parts[0];
-    document.getElementById('key2').textContent = parts[1];
-  }
+  const primaryCombo = cfg.hotkey || 'Ctrl+Win';
+  renderKeyCaps('primaryKeys', primaryCombo);
+  lastPrimaryCombo = primaryCombo;
 
   // Language
   if (cfg.language) document.getElementById('langSelect').value = cfg.language;
@@ -656,10 +659,18 @@ function applyConfig(cfg) {
 }
 
 // --- Save config (语音输入 Tab) ---
+let lastPrimaryCombo = '';
+let lastSecondaryCombo = '';
+
+function getPrimaryHotkeyFromDisplay() {
+  const keys = document.querySelectorAll('#primaryKeys .key');
+  return Array.from(keys).map(k => k.textContent).join('+');
+}
+
 async function saveConfig() {
   const cfg = {
     enabled: document.getElementById('toggleEnabled').classList.contains('on'),
-    hotkey: document.getElementById('key1').textContent + '+' + document.getElementById('key2').textContent,
+    hotkey: getPrimaryHotkeyFromDisplay(),
     language: document.getElementById('langSelect').value || null,
     hotwords: getHotwords(),
     backendUrl: document.getElementById('backendUrlInput').value.trim(),
@@ -702,59 +713,152 @@ async function refreshBackendStatus() {
   }
 }
 
-// --- Hotkey recording ---
-let recording = false;
+// --- Hotkey recording (shared) ---
+let primaryRecording = false;
+let secondaryRecording = false;
 
+function codeToKeyName(code) {
+  // Map e.code to display names, distinguishing left/right modifiers
+  const map = {
+    'ControlLeft': 'LCtrl', 'ControlRight': 'RCtrl',
+    'ShiftLeft': 'LShift', 'ShiftRight': 'RShift',
+    'AltLeft': 'LAlt', 'AltRight': 'RAlt',
+    'MetaLeft': 'LWin', 'MetaRight': 'RWin',
+    'Space': 'Space', 'Enter': 'Enter', 'Escape': 'Esc',
+    'Tab': 'Tab', 'Backspace': 'Backspace', 'Delete': 'Delete',
+    'ArrowLeft': 'Left', 'ArrowRight': 'Right', 'ArrowUp': 'Up', 'ArrowDown': 'Down',
+  };
+  if (map[code]) return map[code];
+  // F-keys
+  if (/^F(\d+)$/.test(code)) return code;
+  // Alpha: KeyA → A
+  if (/^Key([A-Z])$/.test(code)) return code.replace('Key', '');
+  // Digits: Digit0 → 0, Numpad0 → Num0
+  if (/^Digit(\d)$/.test(code)) return code.replace('Digit', '');
+  if (/^Numpad(\d)$/.test(code)) return 'Num' + code.replace('Numpad', '');
+  return null;
+}
+
+function renderKeyCaps(containerId, combo) {
+  const el = document.getElementById(containerId);
+  if (!combo) {
+    el.innerHTML = '<span class="key" style="color:#535353">未设置</span>';
+    return;
+  }
+  const parts = combo.split('+');
+  el.innerHTML = parts.map((p, i) => {
+    let html = '<span class="key">' + p + '</span>';
+    if (i < parts.length - 1) html += '<span class="key-sep">+</span>';
+    return html;
+  }).join('');
+}
+
+// Track all currently-pressed keys during recording
+let pressedKeyNames = []; // ordered list of key names pressed
+let pressedCodeSet = new Set();
+
+function handleRecordKeydown(e, recorderId, keysId, btnId, stopFn, saveFn) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const code = e.code;
+  if (pressedCodeSet.has(code)) return; // key repeat
+
+  const keyName = codeToKeyName(code);
+  if (!keyName) return;
+
+  pressedCodeSet.add(code);
+  pressedKeyNames.push(keyName);
+  renderKeyCaps(keysId, pressedKeyNames.join('+'));
+}
+
+function handleRecordKeyup(e, recorderId, keysId, btnId, stopFn, saveFn) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Only finalize when ALL keys are released
+  const code = e.code;
+  pressedCodeSet.delete(code);
+
+  if (pressedCodeSet.size === 0 && pressedKeyNames.length > 0) {
+    const combo = pressedKeyNames.join('+');
+    pressedKeyNames = [];
+    pressedCodeSet.clear();
+    stopFn();
+    saveFn(combo);
+  }
+}
+
+// --- Primary recorder ---
 function toggleRecord() {
+  if (primaryRecording) { stopRecord(); return; }
+  // Stop secondary if recording
+  if (secondaryRecording) stopSecondaryRecord();
+  primaryRecording = true;
+  pressedKeyNames = [];
+  pressedCodeSet.clear();
   const rec = document.getElementById('recorder');
   const btn = document.getElementById('recBtn');
-  recording = !recording;
-  if (recording) {
-    rec.classList.add('recording');
-    btn.textContent = '按下新组合键...';
-    document.addEventListener('keydown', captureKey);
-  } else {
-    stopRecord();
-  }
+  rec.classList.add('recording');
+  btn.textContent = '按下快捷键...';
+  document.addEventListener('keydown', primaryKeydown);
+  document.addEventListener('keyup', primaryKeyup);
 }
 
 function stopRecord() {
-  recording = false;
-  const rec = document.getElementById('recorder');
-  const btn = document.getElementById('recBtn');
-  rec.classList.remove('recording');
-  btn.textContent = '录制';
-  document.removeEventListener('keydown', captureKey);
+  primaryRecording = false;
+  pressedKeyNames = [];
+  pressedCodeSet.clear();
+  document.getElementById('recorder').classList.remove('recording');
+  document.getElementById('recBtn').textContent = '录制';
+  document.removeEventListener('keydown', primaryKeydown);
+  document.removeEventListener('keyup', primaryKeyup);
 }
 
-function captureKey(e) {
-  e.preventDefault();
-  const mods = [];
-  if (e.ctrlKey) mods.push('Ctrl');
-  if (e.altKey) mods.push('Alt');
-  if (e.shiftKey) mods.push('Shift');
-  if (e.metaKey) mods.push('Win');
-  if (mods.length === 0) return;
+function primaryKeydown(e) { handleRecordKeydown(e, 'recorder', 'primaryKeys', 'recBtn', stopRecord, (combo) => { renderKeyCaps('primaryKeys', combo); savePrimaryCombo(combo); }); }
+function primaryKeyup(e) { handleRecordKeyup(e, 'recorder', 'primaryKeys', 'recBtn', stopRecord, (combo) => { renderKeyCaps('primaryKeys', combo); savePrimaryCombo(combo); }); }
 
-  if (['Control','Alt','Shift','Meta'].includes(e.key)) {
-    if (mods.length >= 2) {
-      document.getElementById('key1').textContent = mods[0];
-      document.getElementById('key2').textContent = mods[1];
-      stopRecord();
-      saveConfig();
-    }
+async function savePrimaryCombo(combo) {
+  if (lastSecondaryCombo && combo === lastSecondaryCombo) {
+    renderKeyCaps('primaryKeys', lastPrimaryCombo);
+    setStatus('录音快捷键不能与 AI 录音键相同');
     return;
   }
-
-  const keyName = e.key.length === 1 ? e.key.toUpperCase() : e.key;
-  mods.push(keyName);
-  if (mods.length >= 2) {
-    document.getElementById('key1').textContent = mods[0];
-    document.getElementById('key2').textContent = mods[1];
+  try {
+    await invoke('save_config', { hotkey: combo });
+    lastPrimaryCombo = combo;
+    setStatus('已保存');
+  } catch (e) {
+    setStatus('保存失败: ' + e);
   }
-  stopRecord();
-  saveConfig();
 }
+
+// --- Secondary recorder ---
+function toggleSecondaryRecord() {
+  if (secondaryRecording) { stopSecondaryRecord(); return; }
+  // Stop primary if recording
+  if (primaryRecording) stopRecord();
+  secondaryRecording = true;
+  pressedKeyNames = [];
+  pressedCodeSet.clear();
+  document.getElementById('secondaryRecorder').classList.add('recording');
+  document.getElementById('secondaryRecBtn').textContent = '按下快捷键...';
+  document.addEventListener('keydown', secondaryKeydown);
+  document.addEventListener('keyup', secondaryKeyup);
+}
+
+function stopSecondaryRecord() {
+  secondaryRecording = false;
+  pressedKeyNames = [];
+  pressedCodeSet.clear();
+  document.getElementById('secondaryRecorder').classList.remove('recording');
+  document.getElementById('secondaryRecBtn').textContent = '录制';
+  document.removeEventListener('keydown', secondaryKeydown);
+  document.removeEventListener('keyup', secondaryKeyup);
+}
+
+function secondaryKeydown(e) { handleRecordKeydown(e, 'secondaryRecorder', 'secondaryKeys', 'secondaryRecBtn', stopSecondaryRecord, (combo) => { renderKeyCaps('secondaryKeys', combo); saveSecondaryHotkey(combo); }); }
+function secondaryKeyup(e) { handleRecordKeyup(e, 'secondaryRecorder', 'secondaryKeys', 'secondaryRecBtn', stopSecondaryRecord, (combo) => { renderKeyCaps('secondaryKeys', combo); saveSecondaryHotkey(combo); }); }
 
 // --- Hotwords ---
 function getHotwords() {
@@ -1159,58 +1263,20 @@ async function moveMode(modeId, direction) {
 }
 
 // --- Secondary Hotkey (AI 录音键) ---
-let secondaryRecording = false;
-
-function toggleSecondaryRecord() {
-  secondaryRecording = !secondaryRecording;
-  const recorder = document.getElementById('secondaryRecorder');
-  const btn = document.getElementById('secondaryRecBtn');
-  if (secondaryRecording) {
-    recorder.classList.add('recording');
-    btn.textContent = '按下新组合键...';
-    document.addEventListener('keydown', captureSecondaryKey);
-  } else {
-    stopSecondaryRecord();
-  }
-}
-
-function stopSecondaryRecord() {
-  secondaryRecording = false;
-  document.getElementById('secondaryRecorder').classList.remove('recording');
-  document.getElementById('secondaryRecBtn').textContent = '录制';
-  document.removeEventListener('keydown', captureSecondaryKey);
-}
-
-function captureSecondaryKey(e) {
-  e.preventDefault();
-  const mods = [];
-  if (e.ctrlKey) mods.push('Ctrl');
-  if (e.altKey) mods.push('Alt');
-  if (e.shiftKey) mods.push('Shift');
-  if (e.metaKey) mods.push('Win');
-  if (mods.length === 0) return;
-
-  if (['Control','Alt','Shift','Meta'].includes(e.key)) {
-    if (mods.length >= 2) {
-      const combo = mods[0] + '+' + mods[1];
-      document.getElementById('secondaryKeyDisplay').textContent = combo;
-      stopSecondaryRecord();
-      saveSecondaryHotkey(combo);
-    }
-    return;
-  }
-
-  const keyName = e.key.length === 1 ? e.key.toUpperCase() : e.key;
-  mods.push(keyName);
-  const combo = mods.slice(0, 2).join('+');
-  document.getElementById('secondaryKeyDisplay').textContent = combo;
-  stopSecondaryRecord();
-  saveSecondaryHotkey(combo);
+function getSecondaryHotkeyFromDisplay() {
+  const keys = document.querySelectorAll('#secondaryKeys .key');
+  return Array.from(keys).map(k => k.textContent).join('+');
 }
 
 async function saveSecondaryHotkey(hotkey) {
+  if (hotkey && lastPrimaryCombo && hotkey === lastPrimaryCombo) {
+    renderKeyCaps('secondaryKeys', lastSecondaryCombo);
+    setStatus('AI 录音键不能与录音快捷键相同');
+    return;
+  }
   try {
     await invoke('save_secondary_hotkey', { hotkey });
+    lastSecondaryCombo = hotkey || '';
     setStatus('已保存');
   } catch (e) {
     setStatus('保存失败: ' + e);
@@ -1220,16 +1286,16 @@ async function saveSecondaryHotkey(hotkey) {
 async function loadSecondaryHotkey() {
   try {
     const hotkey = await invoke('get_secondary_hotkey');
-    if (hotkey) {
-      document.getElementById('secondaryKeyDisplay').textContent = hotkey;
-    }
+    renderKeyCaps('secondaryKeys', hotkey || '');
+    lastSecondaryCombo = hotkey || '';
   } catch (e) {
     console.error('Failed to load secondary hotkey:', e);
   }
 }
 
 function clearSecondaryHotkey() {
-  document.getElementById('secondaryKeyDisplay').textContent = '未设置';
+  if (secondaryRecording) stopSecondaryRecord();
+  renderKeyCaps('secondaryKeys', '');
   saveSecondaryHotkey('');
 }
 

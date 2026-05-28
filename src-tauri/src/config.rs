@@ -223,6 +223,29 @@ impl Default for AppConfig {
     }
 }
 
+fn validate_modifier(name: &str) -> Result<(), String> {
+    match name {
+        "Ctrl" | "Alt" | "Shift" | "Win" | "Meta"
+        | "LCtrl" | "LAlt" | "LShift" | "LWin" | "LMeta"
+        | "RCtrl" | "RAlt" | "RShift" | "RWin" | "RMeta" => Ok(()),
+        _ => Err(format!("Unknown modifier: {}", name)),
+    }
+}
+
+fn validate_key_name(name: &str) -> Result<(), String> {
+    let valid = name.len() == 1 && name.chars().next().unwrap().is_ascii_alphanumeric()
+        || matches!(name,
+            "Ctrl" | "Alt" | "Shift" | "Win" | "Meta"
+            | "LCtrl" | "LAlt" | "LShift" | "LWin" | "LMeta"
+            | "RCtrl" | "RAlt" | "RShift" | "RWin" | "RMeta"
+            | "Space" | "Return" | "Enter" | "Escape" | "Esc" | "Tab"
+            | "Backspace" | "Delete"
+            | "Left" | "Right" | "Up" | "Down"
+            | "F1"|"F2"|"F3"|"F4"|"F5"|"F6"|"F7"|"F8"|"F9"|"F10"|"F11"|"F12"
+        );
+    if valid { Ok(()) } else { Err(format!("Unknown key: {}", name)) }
+}
+
 impl AppConfig {
     pub fn load(path: &PathBuf) -> Self {
         if path.exists() {
@@ -252,16 +275,21 @@ impl AppConfig {
 
     pub fn parse_hotkey(&self) -> Result<(Vec<&str>, &str), String> {
         let parts: Vec<&str> = self.hotkey.split('+').collect();
-        if parts.len() < 2 {
-            return Err("Hotkey must have at least one modifier + one key".to_string());
+        if parts.is_empty() || parts.iter().all(|p| p.trim().is_empty()) {
+            return Err("Hotkey cannot be empty".to_string());
+        }
+        if parts.len() == 1 {
+            // Single key hotkey
+            let key = parts[0];
+            validate_key_name(key)?;
+            return Ok((vec![], key));
         }
         let main_key = parts.last().unwrap();
         let modifiers = &parts[..parts.len() - 1];
         for m in modifiers {
-            if !["Ctrl", "Alt", "Shift", "Win"].contains(m) {
-                return Err(format!("Unknown modifier: {}", m));
-            }
+            validate_modifier(m)?;
         }
+        validate_key_name(main_key)?;
         Ok((modifiers.to_vec(), main_key))
     }
 
@@ -377,8 +405,17 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_hotkey_single_key() {
+        let cfg = AppConfig { hotkey: "F6".to_string(), ..Default::default() };
+        let (mods, key) = cfg.parse_hotkey().unwrap();
+        assert!(mods.is_empty());
+        assert_eq!(key, "F6");
+    }
+
+    #[test]
     fn test_parse_hotkey_single_key_rejected() {
-        let cfg = AppConfig { hotkey: "A".to_string(), ..Default::default() };
+        // Empty hotkey should be rejected
+        let cfg = AppConfig { hotkey: "".to_string(), ..Default::default() };
         assert!(cfg.parse_hotkey().is_err());
     }
 

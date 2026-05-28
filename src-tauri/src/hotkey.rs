@@ -29,26 +29,47 @@ impl HotkeyConfig {
 
     pub fn from_string(s: &str) -> Result<Self, String> {
         let parts: Vec<&str> = s.split('+').collect();
-        if parts.len() < 2 {
-            return Err("Need at least modifier + key".to_string());
+        if parts.is_empty() || parts.iter().all(|p| p.trim().is_empty()) {
+            return Err("Hotkey cannot be empty".to_string());
         }
-        let mut modifiers = Vec::new();
-        for part in &parts[..parts.len() - 1] {
-            modifiers.push(parse_key_name(part)?);
+        if parts.len() == 1 {
+            // Single key hotkey
+            let main_key = parse_key_name(parts[0])?;
+            Ok(Self {
+                modifiers: vec![],
+                main_key,
+                debounce_ms: 100,
+                max_hold_secs: 30,
+            })
+        } else {
+            let mut modifiers = Vec::new();
+            for part in &parts[..parts.len() - 1] {
+                modifiers.push(parse_key_name(part)?);
+            }
+            let main_key = parse_key_name(parts.last().unwrap())?;
+            Ok(Self {
+                modifiers,
+                main_key,
+                debounce_ms: 100,
+                max_hold_secs: 30,
+            })
         }
-        let main_key = parse_key_name(parts.last().unwrap())?;
-        Ok(Self {
-            modifiers,
-            main_key,
-            debounce_ms: 100,
-            max_hold_secs: 30,
-        })
     }
 }
 
 fn parse_key_name(name: &str) -> Result<Key, String> {
     match name {
-        "Ctrl" => Ok(Key::ControlLeft),
+        // Left-side modifiers
+        "LCtrl" | "Ctrl" => Ok(Key::ControlLeft),
+        "LAlt" => Ok(Key::Alt),
+        "LShift" => Ok(Key::ShiftLeft),
+        "LWin" | "LMeta" => Ok(Key::MetaLeft),
+        // Right-side modifiers
+        "RCtrl" => Ok(Key::ControlRight),
+        "RAlt" => Ok(Key::AltGr),
+        "RShift" => Ok(Key::ShiftRight),
+        "RWin" | "RMeta" => Ok(Key::MetaRight),
+        // Generic modifiers (map to left)
         "Alt" => Ok(Key::Alt),
         "Shift" => Ok(Key::ShiftLeft),
         "Win" | "Meta" => Ok(Key::MetaLeft),
@@ -75,6 +96,10 @@ fn parse_key_name(name: &str) -> Result<Key, String> {
         "3" => Ok(Key::Num3), "4" => Ok(Key::Num4), "5" => Ok(Key::Num5),
         "6" => Ok(Key::Num6), "7" => Ok(Key::Num7), "8" => Ok(Key::Num8),
         "9" => Ok(Key::Num9),
+        "F1" => Ok(Key::F1), "F2" => Ok(Key::F2), "F3" => Ok(Key::F3),
+        "F4" => Ok(Key::F4), "F5" => Ok(Key::F5), "F6" => Ok(Key::F6),
+        "F7" => Ok(Key::F7), "F8" => Ok(Key::F8), "F9" => Ok(Key::F9),
+        "F10" => Ok(Key::F10), "F11" => Ok(Key::F11), "F12" => Ok(Key::F12),
         _ => Err(format!("Unknown key: {}", name)),
     }
 }
@@ -270,13 +295,38 @@ mod tests {
     }
 
     #[test]
+    fn test_hotkey_config_from_string_single_key() {
+        let cfg = HotkeyConfig::from_string("F6").unwrap();
+        assert!(cfg.modifiers.is_empty());
+        assert_eq!(cfg.main_key, Key::F6);
+    }
+
+    #[test]
     fn test_hotkey_config_from_string_single_key_rejected() {
-        assert!(HotkeyConfig::from_string("A").is_err());
+        // Empty string should still be rejected
+        assert!(HotkeyConfig::from_string("").is_err());
     }
 
     #[test]
     fn test_hotkey_config_from_string_empty_rejected() {
         assert!(HotkeyConfig::from_string("").is_err());
+    }
+
+    #[test]
+    fn test_parse_key_left_right_modifiers() {
+        assert_eq!(parse_key_name("LCtrl").unwrap(), Key::ControlLeft);
+        assert_eq!(parse_key_name("RCtrl").unwrap(), Key::ControlRight);
+        assert_eq!(parse_key_name("LShift").unwrap(), Key::ShiftLeft);
+        assert_eq!(parse_key_name("RShift").unwrap(), Key::ShiftRight);
+        assert_eq!(parse_key_name("LWin").unwrap(), Key::MetaLeft);
+        assert_eq!(parse_key_name("RWin").unwrap(), Key::MetaRight);
+    }
+
+    #[test]
+    fn test_hotkey_config_left_right_modifier_combo() {
+        let cfg = HotkeyConfig::from_string("RCtrl+LShift+A").unwrap();
+        assert_eq!(cfg.modifiers, vec![Key::ControlRight, Key::ShiftLeft]);
+        assert_eq!(cfg.main_key, Key::KeyA);
     }
 
     #[test]
