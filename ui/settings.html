@@ -157,13 +157,6 @@ body {
   letter-spacing: 1.2px; font-weight: 600; margin: 16px 0 8px;
 }
 
-.status-bar {
-  padding: 8px 24px;
-  background: #1f1f1f;
-  border-top: 1px solid #282828;
-  font-size: 11px; color: #535353;
-}
-
 .modal-overlay {
   display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.6); z-index: 100;
@@ -416,6 +409,10 @@ body {
         <div id="asrModelDropdown" style="display:none;position:absolute;top:100%;left:0;right:50px;background:#1f1f1f;border:1px solid #4d4d4d;border-radius:6px;max-height:200px;overflow-y:auto;z-index:50;margin-top:4px;"></div>
         <button class="rec-btn" onclick="fetchAsrModels()" title="刷新模型列表" style="flex-shrink:0;">刷新</button>
       </div>
+      <div style="margin-top:6px;">
+        <button class="rec-btn" onclick="testAsrConnection()">测试连接</button>
+        <span id="asrTestResult" style="margin-left:10px;font-size:12px;"></span>
+      </div>
     </div>
 
     <div class="setting-row long-input">
@@ -542,7 +539,6 @@ body {
   </div>
 </div>
 
-<div class="status-bar" id="statusBar">就绪</div>
 
 <div class="modal-overlay" id="modeModal">
   <div class="modal">
@@ -655,9 +651,8 @@ async function saveConfig() {
   };
   try {
     await invoke('save_config', cfg);
-    setStatus('已保存');
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('save_config failed:', e);
   }
 }
 
@@ -776,15 +771,14 @@ function primaryKeyup(e) { handleRecordKeyup(e, 'recorder', 'primaryKeys', 'recB
 async function savePrimaryCombo(combo) {
   if (lastSecondaryCombo && combo === lastSecondaryCombo) {
     renderKeyCaps('primaryKeys', lastPrimaryCombo);
-    setStatus('录音快捷键不能与 AI 录音键相同');
+    showToast('recorder', '不能与 AI 录音键相同');
     return;
   }
   try {
     await invoke('save_config', { hotkey: combo });
     lastPrimaryCombo = combo;
-    setStatus('已保存');
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('savePrimaryCombo failed:', e);
   }
 }
 
@@ -855,45 +849,52 @@ async function saveCapsuleDefaults() {
       position: document.getElementById('capsulePosSelect').value,
       offset: parseInt(document.getElementById('capsuleOffsetInput').value) || 70,
     });
-    setStatus('已保存');
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('saveCapsuleDefaults failed:', e);
   }
 }
 
 async function enterPositionMode() {
   try {
     await invoke('enter_position_mode');
-    setStatus('拖拽胶囊到目标位置，然后点击确认');
   } catch (e) {
-    setStatus('操作失败: ' + e);
+    console.error('enterPositionMode failed:', e);
   }
 }
 
 async function resetPosition() {
   try {
     await invoke('reset_capsule_position');
-    setStatus('已恢复默认位置');
   } catch (e) {
-    setStatus('操作失败: ' + e);
+    console.error('resetPosition failed:', e);
   }
 }
 
-// --- Status ---
-function setStatus(msg) {
-  const el = document.getElementById('statusBar');
-  el.textContent = msg;
-  // Error messages in red, success in green, others default
-  if (/失败|错误|不能|异常/.test(msg)) {
-    el.style.color = '#f3727f';
-  } else if (/已保存|已加载|已删除|已恢复/.test(msg)) {
-    el.style.color = '#1ed760';
-  } else {
-    el.style.color = '';
+// --- Inline toast (shows near target element) ---
+toastTimers = {};
+function showToast(targetId, msg, isError) {
+  // Remove existing toast for this target
+  const existing = document.getElementById('toast-' + targetId);
+  if (existing) existing.remove();
+  clearTimeout(toastTimers[targetId]);
+
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  const toast = document.createElement('div');
+  toast.id = 'toast-' + targetId;
+  toast.textContent = msg;
+  toast.style.cssText = 'position:absolute;top:100%;left:0;margin-top:4px;padding:4px 10px;border-radius:6px;font-size:11px;white-space:nowrap;z-index:100;' +
+    (isError ? 'background:rgba(243,114,127,0.15);color:#f3727f;' : 'background:rgba(29,217,96,0.12);color:#1ed760;');
+
+  // Position relative to parent
+  const parent = target.closest('.setting-row') || target.parentElement;
+  if (parent) {
+    parent.style.position = 'relative';
+    parent.appendChild(toast);
   }
-  // Auto-clear after 5s
-  clearTimeout(el._clearTimer);
-  el._clearTimer = setTimeout(() => { el.textContent = '就绪'; el.style.color = ''; }, 5000);
+
+  toastTimers[targetId] = setTimeout(() => toast.remove(), 3000);
 }
 
 // --- LLM Config (AI 处理 Tab) ---
@@ -922,9 +923,8 @@ async function saveLlmConfig() {
       maxTokens: parseInt(document.getElementById('llmMaxTokens').value) || null,
       extraParams: extraParamsStr || null,
     });
-    setStatus('已保存');
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('saveLlmConfig failed:', e);
   }
 }
 
@@ -946,19 +946,41 @@ function toggleAsrApiKeyVisibility() {
 
 async function fetchAsrModels() {
   const btn = document.querySelector('#asrModelInput + .rec-btn');
+  const resultEl = document.getElementById('asrTestResult');
   if (btn) { btn.disabled = true; btn.textContent = '加载中...'; }
   try {
     const result = await invoke('fetch_asr_model_list');
     if (result.success && result.models) {
       allAsrModels = result.models.sort();
-      setStatus('已加载 ' + allAsrModels.length + ' 个 ASR 模型');
+      if (resultEl) { resultEl.textContent = '已加载 ' + allAsrModels.length + ' 个模型'; resultEl.style.color = '#1ed760'; }
     } else {
-      setStatus('ASR 模型加载失败: ' + (result.error || '未知错误'));
+      if (resultEl) { resultEl.textContent = '加载失败: ' + (result.error || '未知错误'); resultEl.style.color = '#f3727f'; }
     }
   } catch (e) {
-    setStatus('ASR 模型加载失败: ' + e);
+    if (resultEl) { resultEl.textContent = '加载失败: ' + e; resultEl.style.color = '#f3727f'; }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
+  }
+}
+
+async function testAsrConnection() {
+  const resultEl = document.getElementById('asrTestResult');
+  resultEl.textContent = '测试中...';
+  resultEl.style.color = '#b3b3b3';
+  try {
+    const result = await invoke('fetch_asr_model_list');
+    if (result.success) {
+      const count = result.models ? result.models.length : 0;
+      resultEl.textContent = '连接成功' + (count > 0 ? '，' + count + ' 个模型' : '');
+      resultEl.style.color = '#1ed760';
+      if (result.models) allAsrModels = result.models.sort();
+    } else {
+      resultEl.textContent = '连接失败: ' + (result.error || '未知错误');
+      resultEl.style.color = '#f3727f';
+    }
+  } catch (e) {
+    resultEl.textContent = '连接失败: ' + e;
+    resultEl.style.color = '#f3727f';
   }
 }
 
@@ -1027,17 +1049,18 @@ function showAsrModelDropdown() { renderDropdown('asrModelDropdown', 'asrModelIn
 
 async function fetchModels() {
   const btn = document.querySelector('#llmModel + .rec-btn');
+  const resultEl = document.getElementById('llmTestResult');
   if (btn) { btn.disabled = true; btn.textContent = '加载中...'; }
   try {
     const result = await invoke('fetch_model_list');
     if (result.success && result.models) {
       allLlmModels = result.models.sort();
-      setStatus('已加载 ' + allLlmModels.length + ' 个模型');
+      if (resultEl) { resultEl.textContent = '已加载 ' + allLlmModels.length + ' 个模型'; resultEl.style.color = '#1ed760'; }
     } else {
-      setStatus('模型加载失败: ' + (result.error || '未知错误'));
+      if (resultEl) { resultEl.textContent = '加载失败: ' + (result.error || '未知错误'); resultEl.style.color = '#f3727f'; }
     }
   } catch (e) {
-    setStatus('模型加载失败: ' + e);
+    if (resultEl) { resultEl.textContent = '加载失败: ' + e; resultEl.style.color = '#f3727f'; }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '刷新'; }
   }
@@ -1099,9 +1122,8 @@ async function saveProcessingMode() {
   try {
     const modeId = document.getElementById('processingModeSelect').value;
     await invoke('save_default_processing_mode', { modeId });
-    setStatus('已保存');
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('saveProcessingMode failed:', e);
   }
 }
 
@@ -1112,7 +1134,7 @@ async function deleteMode(modeId) {
     if (!mode) return;
     showDeleteConfirm(modeId, mode.name);
   } catch (e) {
-    setStatus('加载提示词失败: ' + e);
+    console.error('deleteMode failed:', e);
   }
 }
 
@@ -1140,10 +1162,9 @@ async function confirmDelete(modeId) {
   closeDeleteConfirm();
   try {
     await invoke('delete_processing_mode', { modeId });
-    setStatus('已删除');
     loadProcessingModes();
   } catch (e) {
-    setStatus('删除失败: ' + e);
+    console.error('confirmDelete failed:', e);
   }
 }
 
@@ -1173,7 +1194,7 @@ async function editMode(modeId) {
     document.getElementById('modalUserTemplate').value = mode.user_template || '{asr_text}';
     document.getElementById('modeModal').classList.add('visible');
   } catch (e) {
-    setStatus('加载提示词失败: ' + e);
+    console.error('editMode failed:', e);
   }
 }
 
@@ -1206,10 +1227,9 @@ async function saveModeModal() {
   try {
     await invoke('save_processing_mode', { mode });
     closeModeModal();
-    setStatus('已保存');
     loadProcessingModes();
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('saveModeModal failed:', e);
   }
 }
 
@@ -1235,9 +1255,8 @@ async function moveMode(modeId, direction) {
       await invoke('save_processing_mode', { mode: aiModes[i] });
     }
     loadProcessingModes();
-    setStatus('已保存');
   } catch (e) {
-    setStatus('排序失败: ' + e);
+    console.error('moveMode failed:', e);
   }
 }
 
@@ -1250,15 +1269,14 @@ function getSecondaryHotkeyFromDisplay() {
 async function saveSecondaryHotkey(hotkey) {
   if (hotkey && lastPrimaryCombo && hotkey === lastPrimaryCombo) {
     renderKeyCaps('secondaryKeys', lastSecondaryCombo);
-    setStatus('AI 录音键不能与录音快捷键相同');
+    showToast('secondaryRecorder', '不能与录音快捷键相同', true);
     return;
   }
   try {
     await invoke('save_secondary_hotkey', { hotkey });
     lastSecondaryCombo = hotkey || '';
-    setStatus('已保存');
   } catch (e) {
-    setStatus('保存失败: ' + e);
+    console.error('saveSecondaryHotkey failed:', e);
   }
 }
 
