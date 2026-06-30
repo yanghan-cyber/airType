@@ -184,6 +184,8 @@ pub struct AppConfig {
     pub language: Option<String>,
     pub backend_url: String,
     pub asr_api_key: String,
+    /// Use WebSocket realtime streaming ASR (falls back to HTTP batch on failure).
+    pub realtime_asr: bool,
     pub capsule_x: Option<i32>,
     pub capsule_y: Option<i32>,
     pub capsule_default_position: String,
@@ -205,6 +207,7 @@ impl Default for AppConfig {
             language: None,
             backend_url: "https://api.openai.com/v1".to_string(),
             asr_api_key: String::new(),
+            realtime_asr: false,
             capsule_x: None,
             capsule_y: None,
             capsule_default_position: "bottom".to_string(),

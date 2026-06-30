@@ -34,6 +34,10 @@ pub fn get_capsule_state(
             phase: "recording".into(), rms,
             elapsed_ms: started_at.elapsed().as_millis() as u64, error: None,
         },
+        crate::state::RecordingState::RealtimeRecording { started_at, .. } => CapsuleState {
+            phase: "recording".into(), rms,
+            elapsed_ms: started_at.elapsed().as_millis() as u64, error: None,
+        },
         crate::state::RecordingState::Processing => CapsuleState {
             phase: "loading".into(), rms, elapsed_ms: 0, error: None,
         },
@@ -136,6 +140,7 @@ pub fn save_config(
     hotwords: Option<Vec<String>>,
     backend_url: Option<String>,
     asr_api_key: Option<String>,
+    realtime_asr: Option<bool>,
     hotkey_config: tauri::State<'_, std::sync::Arc<std::sync::Mutex<crate::hotkey::HotkeyConfig>>>,
 ) -> Result<(), String> {
     let path = config_path();
@@ -155,6 +160,7 @@ pub fn save_config(
     if let Some(v) = hotwords { cfg.hotwords = v; }
     if let Some(v) = backend_url { cfg.backend_url = v; }
     if let Some(v) = asr_api_key { cfg.asr_api_key = v; }
+    if let Some(v) = realtime_asr { cfg.realtime_asr = v; }
     cfg.save(&path);
     Ok(())
 }

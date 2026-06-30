@@ -99,12 +99,34 @@ html, body {
   box-shadow: 0 0 4px rgba(243,114,127,0.5);
   animation: blink 1s ease-in-out infinite;
 }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 .time-text {
   color: #fff; font-size: 12px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.5px; font-weight: 500;
 }
+
+/* Realtime streaming text */
+.realtime-text {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  max-width: 0;
+  opacity: 0;
+  text-overflow: clip;
+  direction: ltr;
+  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+}
+.realtime-text::-webkit-scrollbar { display: none; }
+.realtime-text.has-text {
+  max-width: 320px;
+  opacity: 1;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
 .error-wrap {
   display: flex; align-items: center; justify-content: center;
@@ -406,6 +428,7 @@ html, body {
       <div class="rec-dot"></div>
       <span class="time-text" id="timeText">0:00</span>
     </div>
+    <div class="realtime-text" id="realtimeText"></div>
     <div class="spinner" id="spinner"></div>
     <div class="checkmark-wrap" id="checkmark">
       <svg class="checkmark-svg" viewBox="0 0 24 24" fill="none" stroke="#1ed760" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
@@ -589,6 +612,13 @@ function fullReset() {
   for (let i = 0; i < 5; i++) $('b'+i).style.height = '20%';
   $('timeText').textContent = '0:00';
   timerSec = 0;
+  const rt = $('realtimeText');
+  if (rt) {
+    rt.textContent = '';
+    rt.classList.remove('has-text');
+    rt.style.opacity = '';
+    rt.style.transition = '';
+  }
 }
 
 function updateBars(rms) {
@@ -625,6 +655,7 @@ async function showRecording() {
   ], { duration: 400, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)', fill: 'none' });
   startBars();
   startClock();
+  ensureRealtimeExpandListener();
 }
 
 async function showLoading() {
@@ -767,32 +798,30 @@ async function showError(msg) {
   // Capture current visual state BEFORE cancelling animations to prevent snap
   captureAndCancel(c);
 
-  // Smooth morph to error size via CSS transition
+  // Smooth morph to error size via CSS transition (34x34 — same as Done/thinking)
   c.classList.add('morphing');
   void c.offsetWidth;
-  c.style.width = '44px';
-  c.style.height = '44px';
-  c.style.borderRadius = '22px';
+  c.style.width = '34px';
+  c.style.height = '34px';
+  c.style.borderRadius = '17px';
   c.style.padding = '0';
 
-  await sleep(260);
+  await sleep(200);
   if (animGen !== gen) return;
   c.classList.remove('morphing');
 
   $('errorWrap').classList.add('on');
 
-  // Shake animation (like input error)
+  // Quick light shake (short + small amplitude — not sluggish)
   c.animate([
     { transform: 'translateX(0)', offset: 0 },
-    { transform: 'translateX(-4px)', offset: 0.15 },
-    { transform: 'translateX(4px)', offset: 0.3 },
-    { transform: 'translateX(-3px)', offset: 0.45 },
-    { transform: 'translateX(3px)', offset: 0.6 },
+    { transform: 'translateX(-3px)', offset: 0.25 },
+    { transform: 'translateX(3px)', offset: 0.5 },
     { transform: 'translateX(-1px)', offset: 0.75 },
     { transform: 'translateX(0)', offset: 1 },
-  ], { duration: 400, easing: 'ease-in-out' });
+  ], { duration: 240, easing: 'ease-in-out' });
 
-  await sleep(1500);
+  await sleep(480);
   if (animGen !== gen) return;
 
   const fade = c.animate([
@@ -1126,11 +1155,32 @@ async function showLlmProcessing() {
   invoke('resize_capsule_window', { width: 34.0, height: 34.0 }).catch(() => {});
 }
 
+// Realtime text visibility is driven by the `has-text` CSS class (max-width +
+// opacity transition). No window resize — the window is fixed-size so the
+// centered capsule never jumps.
+function ensureRealtimeExpandListener() {
+  if (!window.__TAURI__ || !window.__TAURI__.event) return;
+  window.__TAURI__.event.listen('realtime-text', (event) => {
+    const el = document.getElementById('realtimeText');
+    if (!el) return;
+    const text = event.payload.text || '';
+    el.textContent = text;
+    el.classList.toggle('has-text', !!text);
+    // Scroll to the rightmost (latest) content so older text exits left.
+    el.scrollLeft = el.scrollWidth;
+  }).catch(e => console.error('listen realtime-text failed:', e));
+}
+
+function listenRealtimeText() {
+  ensureRealtimeExpandListener();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   startPolling();
   listenPositionMode();
   listenCapsuleEvents();
   listenModeSelection();
+  listenRealtimeText();
 });
 
 // --- Position mode ---

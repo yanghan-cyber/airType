@@ -20,6 +20,8 @@ reqwest = { version = "0.12", features = ["blocking", "json", "multipart"] }
 cpal = "0.15"
 rdev = { version = "0.5", features = ["unstable_grab"] }
 tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.27", features = ["connect"] }
+futures-util = "0.3"
 image = "0.25"
 chrono = "0.4"
 

@@ -415,6 +415,14 @@ body {
       </div>
     </div>
 
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">实时转录</div>
+        <div class="setting-hint">边说边出字，需后端支持 WebSocket 实时端点；连不上自动回退批量</div>
+      </div>
+      <div class="toggle" id="toggleRealtimeAsr" onclick="toggleRealtimeAsr()"></div>
+    </div>
+
     <div class="setting-row long-input">
       <div><div class="setting-label">热词</div>
       <div class="setting-hint">添加专有名词、术语，提高识别准确率</div></div>
@@ -625,6 +633,11 @@ function applyConfig(cfg) {
   if (cfg.asr_api_key) document.getElementById('asrApiKeyInput').value = cfg.asr_api_key;
   if (cfg.model) document.getElementById('asrModelInput').value = cfg.model;
 
+  // Realtime ASR toggle
+  const rtToggle = document.getElementById('toggleRealtimeAsr');
+  if (cfg.realtime_asr === true) rtToggle.classList.add('on');
+  else rtToggle.classList.remove('on');
+
   // Capsule position
   if (cfg.capsule_default_position) document.getElementById('capsulePosSelect').value = cfg.capsule_default_position;
   if (cfg.capsule_default_offset != null) document.getElementById('capsuleOffsetInput').value = cfg.capsule_default_offset;
@@ -648,6 +661,7 @@ async function saveConfig() {
     backendUrl: document.getElementById('backendUrlInput').value.trim(),
     model: document.getElementById('asrModelInput').value.trim() || null,
     asrApiKey: document.getElementById('asrApiKeyInput').value.trim(),
+    realtimeAsr: document.getElementById('toggleRealtimeAsr').classList.contains('on'),
   };
   try {
     await invoke('save_config', cfg);
@@ -659,6 +673,13 @@ async function saveConfig() {
 // --- Enabled toggle ---
 async function toggleEnabled() {
   const toggle = document.getElementById('toggleEnabled');
+  toggle.classList.toggle('on');
+  await saveConfig();
+}
+
+// --- Realtime ASR toggle ---
+async function toggleRealtimeAsr() {
+  const toggle = document.getElementById('toggleRealtimeAsr');
   toggle.classList.toggle('on');
   await saveConfig();
 }

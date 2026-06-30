@@ -5,6 +5,8 @@ pub struct AudioBuffer {
     data: Vec<i16>,
     sample_rate: u32,
     capturing: bool,
+    /// Cursor for realtime incremental reads (non-destructive; batch reads still see full buffer).
+    realtime_cursor: usize,
 }
 
 impl AudioBuffer {
@@ -13,6 +15,7 @@ impl AudioBuffer {
             data: Vec::new(),
             sample_rate,
             capturing: false,
+            realtime_cursor: 0,
         }
     }
 
@@ -54,6 +57,7 @@ impl AudioBuffer {
 
     pub fn clear(&mut self) {
         self.data.clear();
+        self.realtime_cursor = 0;
     }
 
     pub fn start_capture(&mut self) {
@@ -72,6 +76,15 @@ impl AudioBuffer {
     /// Return a slice of the raw i16 audio data (for RMS, no copy).
     pub fn as_i16_slice(&self) -> &[i16] {
         &self.data
+    }
+
+    /// Take samples accumulated since the last realtime read (non-destructive:
+    /// the full buffer is retained for HTTP-batch fallback). Advances the
+    /// realtime cursor.
+    pub fn take_recent_samples(&mut self) -> Vec<i16> {
+        let recent = self.data[self.realtime_cursor..].to_vec();
+        self.realtime_cursor = self.data.len();
+        recent
     }
 }
 
@@ -241,5 +254,29 @@ mod tests {
         buf.push_i16(&[1, 2, 3]);
         let _ = buf.take_pcm_bytes();
         assert_eq!(buf.len(), 0);
+    }
+
+    #[test]
+    fn test_take_recent_samples_incremental() {
+        let mut buf = AudioBuffer::new(16000);
+        buf.push_i16(&[1, 2, 3]);
+        assert_eq!(buf.take_recent_samples(), vec![1, 2, 3]);
+        // buffer not cleared by realtime read
+        assert_eq!(buf.len(), 3);
+        buf.push_i16(&[4, 5]);
+        // only the new samples since last read
+        assert_eq!(buf.take_recent_samples(), vec![4, 5]);
+        // full buffer still available for batch fallback
+        assert_eq!(buf.as_i16_slice(), &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_clear_resets_realtime_cursor() {
+        let mut buf = AudioBuffer::new(16000);
+        buf.push_i16(&[1, 2, 3]);
+        let _ = buf.take_recent_samples();
+        buf.clear();
+        buf.push_i16(&[9]);
+        assert_eq!(buf.take_recent_samples(), vec![9]);
     }
 }

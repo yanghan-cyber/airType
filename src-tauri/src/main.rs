@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod asr;
+mod asr_realtime;
 mod audio;
 mod commands;
 mod config;
@@ -39,6 +40,8 @@ struct PipelineCtx {
     app_handle: tauri::AppHandle,
     hotkey_config: Arc<Mutex<HotkeyConfig>>,
     secondary_hotkey_config: Arc<Mutex<Option<HotkeyConfig>>>,
+    runtime: Arc<tokio::runtime::Runtime>,
+    realtime_session: Arc<Mutex<Option<asr_realtime::RealtimeSession>>>,
 }
 
 fn main() {
@@ -64,6 +67,14 @@ fn main() {
     let secondary_hotkey_config: Arc<Mutex<Option<HotkeyConfig>>> = Arc::new(Mutex::new(
         cfg.hotkey_secondary.as_ref().and_then(|s| HotkeyConfig::from_string(s).ok())
     ));
+
+    let runtime: Arc<tokio::runtime::Runtime> = Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("failed to build tokio runtime"),
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -131,6 +142,8 @@ fn main() {
                 app_handle: app.handle().clone(),
                 hotkey_config: hotkey_config.clone(),
                 secondary_hotkey_config: secondary_hotkey_config.clone(),
+                runtime: runtime.clone(),
+                realtime_session: Arc::new(Mutex::new(None)),
             }));
 
             // Hotkey listener thread
@@ -185,23 +198,31 @@ fn main() {
 pub fn position_capsule(win: &tauri::WebviewWindow) {
     let config_path = config::config_path();
     let cfg = config::AppConfig::load(&config_path);
-
+    // Fixed window size for the whole recording cycle. Wide enough for the
+    // realtime-text capsule so we NEVER resize at runtime — resizing makes the
+    // centered capsule jump horizontally, which is the flicker source.
+    const WIN_W: f64 = 520.0;
+    const WIN_H: f64 = 80.0; // extra height for box-shadow + entry translateY
+    const CAPSULE_H: f64 = 40.0;
     if let Ok(monitor) = win.primary_monitor() {
         if let Some(m) = monitor {
             let scale = m.scale_factor();
-            let win_w = 150.0 * scale;
-            let win_h = 40.0 * scale;
-
-            // Reset size in case it was left at popup dimensions
-            let size = tauri::PhysicalSize::new(win_w as u32, win_h as u32);
-            let _ = win.set_size(tauri::Size::Physical(size));
-
-            let (x, y) = cfg.capsule_position(
+            let phys_w = (WIN_W * scale) as u32;
+            let phys_h = (WIN_H * scale) as u32;
+            let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(phys_w, phys_h)));
+            // Horizontally center the window (capsule centers inside it).
+            // Vertically, capsule_position with CAPSULE_H gives the top y for a
+            // 40-tall window; shift up by half the extra height so the
+            // vertically-centered capsule lands at the same spot as before.
+            let (x, y_capsule) = cfg.capsule_position(
                 m.size().width as f64, m.size().height as f64,
-                win_w, win_h, scale,
+                WIN_W * scale, CAPSULE_H * scale, scale,
             );
-            let pos = tauri::PhysicalPosition::new(x, y);
-            if let Err(e) = win.set_position(tauri::Position::Physical(pos)) {
+            let extra_v = ((WIN_H - CAPSULE_H) / 2.0 * scale) as i32;
+            let y = (y_capsule - extra_v).max(0);
+            if let Err(e) = win.set_position(tauri::Position::Physical(
+                tauri::PhysicalPosition::new(x, y)
+            )) {
                 log_debug(&format!("[capsule] set_position error: {}", e));
             }
         }
@@ -220,7 +241,7 @@ fn open_capsule_window(app_handle: &tauri::AppHandle) {
         WebviewUrl::App("capsule.html".into()),
     )
     .title("AirType")
-    .inner_size(150.0, 40.0)
+    .inner_size(520.0, 80.0)
     .decorations(false)
     .transparent(true)
     .shadow(false)
@@ -296,6 +317,8 @@ fn handle_hotkey_transition(
             let stream_arc;
             let sample_rate_arc;
             let app_handle;
+            let runtime_arc;
+            let realtime_session_arc;
             {
                 let p = ctx.lock().unwrap();
                 state_arc = p.state.clone();
@@ -303,6 +326,8 @@ fn handle_hotkey_transition(
                 stream_arc = p.stream.clone();
                 sample_rate_arc = p.sample_rate.clone();
                 app_handle = p.app_handle.clone();
+                runtime_arc = p.runtime.clone();
+                realtime_session_arc = p.realtime_session.clone();
             };
 
             let mut s = state_arc.lock().unwrap();
@@ -334,9 +359,18 @@ fn handle_hotkey_transition(
                 log_debug(&format!("[pipeline] Not idle ({:?}), skipping", s.recording));
                 return;
             }
-            let _ = transition_to(&mut s.recording, RecordingState::Recording {
-                started_at: std::time::Instant::now(),
-            });
+            let cfg = config::AppConfig::load(&config::config_path());
+            let use_realtime = cfg.realtime_asr;
+            let now = std::time::Instant::now();
+            let _ = if use_realtime {
+                transition_to(&mut s.recording, RecordingState::RealtimeRecording {
+                    started_at: now,
+                    finalized: Vec::new(),
+                    current_partial: String::new(),
+                })
+            } else {
+                transition_to(&mut s.recording, RecordingState::Recording { started_at: now })
+            };
             drop(s);
 
             // Create audio stream on demand
@@ -409,6 +443,20 @@ fn handle_hotkey_transition(
             buf.clear();
             buf.start_capture();
             drop(buf);
+            if use_realtime {
+                let sr = *sample_rate_arc.lock().unwrap();
+                let session = asr_realtime::RealtimeSession::launch(
+                    &runtime_arc,
+                    &cfg.backend_url,
+                    &cfg.asr_api_key,
+                    buffer_arc.clone(),
+                    sr,
+                    state_arc.clone(),
+                    app_handle.clone(),
+                );
+                *realtime_session_arc.lock().unwrap() = Some(session);
+                log_debug("[pipeline] Realtime session launched (connecting in background)");
+            }
             open_capsule_window(&app_handle);
             if let Some(win) = app_handle.get_webview_window("capsule") {
                 let _ = win.show();
@@ -424,6 +472,8 @@ fn handle_hotkey_transition(
             let stream_arc;
             let sample_rate_val;
             let app_handle;
+            let runtime_arc;
+            let realtime_session_arc;
             {
                 let p = ctx.lock().unwrap();
                 state_arc = p.state.clone();
@@ -431,10 +481,13 @@ fn handle_hotkey_transition(
                 stream_arc = p.stream.clone();
                 sample_rate_val = *p.sample_rate.lock().unwrap();
                 app_handle = p.app_handle.clone();
+                runtime_arc = p.runtime.clone();
+                realtime_session_arc = p.realtime_session.clone();
             };
 
             let mut s = state_arc.lock().unwrap();
-            if !matches!(s.recording, RecordingState::Recording { .. }) {
+            let is_realtime = matches!(s.recording, RecordingState::RealtimeRecording { .. });
+            if !is_realtime && !matches!(s.recording, RecordingState::Recording { .. }) {
                 log_debug(&format!("[pipeline] Not recording ({:?}), skipping release", s.recording));
                 return;
             }
@@ -444,16 +497,53 @@ fn handle_hotkey_transition(
                 let _ = win.emit("capsule-state", serde_json::json!({"phase": "loading", "rms": 0.0, "elapsed_ms": 0, "error": null}));
             }
 
-            let mut buf = buffer_arc.lock().unwrap();
-            buf.stop_capture();
-            let pcm = buf.take_pcm_bytes();
-            drop(buf);
-            // Drop audio stream to release microphone
+            // Common: stop capture + release microphone
+            {
+                let mut buf = buffer_arc.lock().unwrap();
+                buf.stop_capture();
+            }
             {
                 let mut stream_guard = stream_arc.0.lock().unwrap();
                 *stream_guard = None;
             }
             log_debug("[audio] Stream dropped, microphone released");
+
+            // ── Realtime path: finalize via the WS session ──
+            if is_realtime {
+                let session = realtime_session_arc.lock().unwrap().take();
+                let state_clone = state_arc.clone();
+                let app_clone = app_handle.clone();
+                let buffer_clone = buffer_arc.clone();
+                let runtime_clone = runtime_arc.clone();
+                std::thread::spawn(move || {
+                    log_debug("[pipeline] Realtime finalize thread started");
+                    let text_result = match session {
+                        Some(sess) if sess.is_connected() => runtime_clone.block_on(sess.finalize()),
+                        Some(sess) => {
+                            // WS handshake not finished on release (short
+                            // recording). Audio is fully buffered → transcribe
+                            // via HTTP batch immediately (no waiting).
+                            log_debug("[pipeline] Realtime not connected → fallback to batch");
+                            let _ = runtime_clone.block_on(sess.cancel());
+                            let pcm = buffer_clone.lock().unwrap().take_pcm_bytes();
+                            transcribe_batch(&pcm, sample_rate_val)
+                        }
+                        None => {
+                            let pcm = buffer_clone.lock().unwrap().take_pcm_bytes();
+                            transcribe_batch(&pcm, sample_rate_val)
+                        }
+                    };
+                    log_debug(&format!("[pipeline] Realtime result: '{:?}'", text_result.as_ref().ok().map(|t| t.as_str())));
+                    finish_direct_inject(text_result, &state_clone, &app_clone);
+                });
+                return;
+            }
+
+            // ── Batch path (existing): HTTP transcription ──
+            let pcm = {
+                let mut buf = buffer_arc.lock().unwrap();
+                buf.take_pcm_bytes()
+            };
             log_debug(&format!("[pipeline] PCM bytes captured: {}, sample_rate: {}", pcm.len(), sample_rate_val));
 
             let state_clone = state_arc.clone();
@@ -478,8 +568,12 @@ fn handle_hotkey_transition(
                         if cancelled {
                             log_debug("[pipeline] Cancelled during ASR, discarding result");
                         } else if result.text.is_empty() {
+                            // Empty: spoke too short/quiet. Silent reset, not an error.
+                            log_debug("[pipeline] Batch empty result → silent reset");
                             let mut s = state_clone.lock().unwrap();
-                            let _ = transition_to(&mut s.recording, RecordingState::Error("ASR 返回空文本".into()));
+                            let _ = transition_to(&mut s.recording, RecordingState::Idle);
+                            drop(s);
+                            close_capsule_window(&app_handle);
                         } else {
                             // Handle based on hotkey source
                             match source_clone {
@@ -523,8 +617,66 @@ fn handle_hotkey_transition(
                     }
                 }
             });
-        }
+        },
         HotkeyTransition::Debounced | HotkeyTransition::ReleasedTooEarly | HotkeyTransition::Pressed => {}
+    }
+}
+
+/// HTTP-batch transcription (used as realtime fallback too).
+fn transcribe_batch(pcm: &[u8], sample_rate: u32) -> Result<String, String> {
+    let cfg = config::AppConfig::load(&config::config_path());
+    let client = asr::AsrClient::new(&cfg.backend_url, &cfg.asr_api_key);
+    let prompt = {
+        let ctx = cfg.context_string();
+        if ctx.is_empty() { None } else { Some(ctx) }
+    };
+    client
+        .transcribe(pcm, sample_rate, &cfg.model, cfg.language.as_deref(), prompt.as_deref())
+        .map(|r| r.text)
+        .map_err(|e| e.to_string())
+}
+
+/// Inject text directly (realtime path skips LLM processing modes for speed).
+fn finish_direct_inject(
+    result: Result<String, String>,
+    state: &Arc<Mutex<AppState>>,
+    app_handle: &tauri::AppHandle,
+) {
+    match result {
+        Ok(text) if !text.is_empty() => {
+            let cancelled = {
+                let s = state.lock().unwrap();
+                !matches!(s.recording, RecordingState::Processing)
+            };
+            if cancelled {
+                log_debug("[pipeline] Cancelled before inject, discarding");
+            } else {
+                let mut s = state.lock().unwrap();
+                let _ = transition_to(&mut s.recording, RecordingState::Done);
+                drop(s);
+                let _ = inject::inject_text(&text);
+            }
+        }
+        Ok(_) => {
+            // Empty result: spoke too short/quiet. Silent reset — not an error.
+            log_debug("[pipeline] Empty result → silent reset");
+            let mut s = state.lock().unwrap();
+            let _ = transition_to(&mut s.recording, RecordingState::Idle);
+            drop(s);
+            close_capsule_window(app_handle);
+            return;
+        }
+        Err(e) => {
+            let mut s = state.lock().unwrap();
+            let _ = transition_to(&mut s.recording, RecordingState::Error(e));
+        }
+    }
+    std::thread::sleep(Duration::from_millis(2000));
+    let mut s = state.lock().unwrap();
+    if matches!(s.recording, RecordingState::Done | RecordingState::Error(_)) {
+        let _ = transition_to(&mut s.recording, RecordingState::Idle);
+        drop(s);
+        close_capsule_window(app_handle);
     }
 }
 
@@ -596,16 +748,42 @@ fn handle_esc_cancel(ctx: &Arc<Mutex<PipelineCtx>>) -> bool {
     let buffer_arc;
     let stream_arc;
     let app_handle;
+    let runtime_arc;
+    let realtime_session_arc;
     {
         let p = ctx.lock().unwrap();
         state_arc = p.state.clone();
         buffer_arc = p.buffer.clone();
         stream_arc = p.stream.clone();
         app_handle = p.app_handle.clone();
+        runtime_arc = p.runtime.clone();
+        realtime_session_arc = p.realtime_session.clone();
     };
 
     let mut s = state_arc.lock().unwrap();
     match &s.recording {
+        RecordingState::RealtimeRecording { .. } => {
+            log_debug("[cancel] ESC during RealtimeRecording → Idle");
+            let _ = transition_to(&mut s.recording, RecordingState::Idle);
+            drop(s);
+            let mut buf = buffer_arc.lock().unwrap();
+            buf.stop_capture();
+            buf.clear();
+            drop(buf);
+            {
+                let mut stream_guard = stream_arc.0.lock().unwrap();
+                *stream_guard = None;
+            }
+            // Abort the WS session (no inject)
+            if let Some(sess) = realtime_session_arc.lock().unwrap().take() {
+                let runtime_clone = runtime_arc.clone();
+                std::thread::spawn(move || {
+                    let _ = runtime_clone.block_on(sess.cancel());
+                });
+            }
+            close_capsule_window(&app_handle);
+            true
+        }
         RecordingState::Recording { .. } => {
             log_debug("[cancel] ESC during Recording → Idle");
             let _ = transition_to(&mut s.recording, RecordingState::Idle);

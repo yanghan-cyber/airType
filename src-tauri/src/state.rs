@@ -4,6 +4,13 @@ use std::sync::{Arc, Mutex};
 pub enum RecordingState {
     Idle,
     Recording { started_at: std::time::Instant },
+    /// Realtime WebSocket streaming. `finalized` holds sentence-finalized text,
+    /// `current_partial` the in-progress partial. Display text = concat + partial.
+    RealtimeRecording {
+        started_at: std::time::Instant,
+        finalized: Vec<String>,
+        current_partial: String,
+    },
     Processing,
     LlmProcessing { text: String },
     ModeSelection { text: String },
@@ -35,8 +42,11 @@ pub fn transition_to(state: &mut RecordingState, next: RecordingState) -> Result
     let prev = state.clone();
     match (&prev, &next) {
         (RecordingState::Idle, RecordingState::Recording { .. }) => {}
+        (RecordingState::Idle, RecordingState::RealtimeRecording { .. }) => {}
         (RecordingState::Recording { .. }, RecordingState::Processing) => {}
         (RecordingState::Recording { .. }, RecordingState::Idle) => {}
+        (RecordingState::RealtimeRecording { .. }, RecordingState::Processing) => {}
+        (RecordingState::RealtimeRecording { .. }, RecordingState::Idle) => {}
         (RecordingState::Processing, RecordingState::Done) => {}
         (RecordingState::Processing, RecordingState::Error(_)) => {}
         (RecordingState::Processing, RecordingState::Idle) => {}
@@ -147,6 +157,27 @@ mod tests {
         transition_to(&mut state, RecordingState::Recording { started_at: std::time::Instant::now() }).unwrap();
         transition_to(&mut state, RecordingState::Processing).unwrap();
         transition_to(&mut state, RecordingState::ModeSelection { text: "hello".into() }).unwrap();
+        assert!(transition_to(&mut state, RecordingState::Idle).is_ok());
+    }
+
+    #[test]
+    fn test_realtime_recording_lifecycle() {
+        let mut state = RecordingState::Idle;
+        assert!(transition_to(&mut state, RecordingState::RealtimeRecording {
+            started_at: std::time::Instant::now(),
+            finalized: vec![], current_partial: String::new(),
+        }).is_ok());
+        assert!(transition_to(&mut state, RecordingState::Processing).is_ok());
+        assert!(transition_to(&mut state, RecordingState::Done).is_ok());
+    }
+
+    #[test]
+    fn test_realtime_recording_cancel() {
+        let mut state = RecordingState::Idle;
+        transition_to(&mut state, RecordingState::RealtimeRecording {
+            started_at: std::time::Instant::now(),
+            finalized: vec![], current_partial: String::new(),
+        }).unwrap();
         assert!(transition_to(&mut state, RecordingState::Idle).is_ok());
     }
 }
