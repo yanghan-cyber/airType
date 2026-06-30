@@ -472,6 +472,10 @@ const ATK = 0.4, REL = 0.15;
 let sm = [0,0,0,0,0], barIv = null, timerIv = null, timerSec = 0;
 let animGen = 0;
 let activeMorph = null;  // track morph animation to cancel on reset
+// True only while the realtime-text panel should accept updates (i.e. during
+// recording). Set false when leaving for loading/done/error so late
+// partial/sentence events from the WS finalize don't repopulate the panel.
+let rtActive = false;
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -612,12 +616,22 @@ function fullReset() {
   for (let i = 0; i < 5; i++) $('b'+i).style.height = '20%';
   $('timeText').textContent = '0:00';
   timerSec = 0;
+  clearRealtimeText();
+}
+
+// Clear realtime text panel — called when leaving the realtime recording
+// state (loading/done/error) so residual text doesn't push spinner/
+// checkmark off-center. display:none also removes it from the flex layout
+// entirely, so the capsule's gap:8px doesn't offset the centered spinner/
+// checkmark/thinking-dots.
+function clearRealtimeText() {
   const rt = $('realtimeText');
   if (rt) {
     rt.textContent = '';
     rt.classList.remove('has-text');
     rt.style.opacity = '';
     rt.style.transition = '';
+    rt.style.display = 'none';
   }
 }
 
@@ -645,6 +659,7 @@ function startClock() {
 }
 
 async function showRecording() {
+  rtActive = true;
   fullReset();
   const c = $('capsule');
   c.className = 'capsule visible';
@@ -659,6 +674,8 @@ async function showRecording() {
 }
 
 async function showLoading() {
+  rtActive = false;
+  clearRealtimeText();
   const gen = animGen;
   clearInterval(barIv); barIv = null;
   clearInterval(timerIv); timerIv = null;
@@ -699,6 +716,8 @@ async function showLoading() {
 }
 
 async function showDone() {
+  rtActive = false;
+  clearRealtimeText();
   const gen = animGen;
   const c = $('capsule');
   if (!c.classList.contains('visible')) {
@@ -776,6 +795,8 @@ async function showDone() {
 }
 
 async function showError(msg) {
+  rtActive = false;
+  clearRealtimeText();
   const gen = animGen;
   const c = $('capsule');
   if (!c.classList.contains('visible')) {
@@ -1161,11 +1182,18 @@ async function showLlmProcessing() {
 function ensureRealtimeExpandListener() {
   if (!window.__TAURI__ || !window.__TAURI__.event) return;
   window.__TAURI__.event.listen('realtime-text', (event) => {
+    // Ignore updates once we've left the recording state — the WS finalize
+    // path can emit a few trailing partial/sentence events after the user
+    // releases the hotkey, and those would repopulate the panel and push
+    // the spinner/checkmark off-center.
+    if (!rtActive) return;
     const el = document.getElementById('realtimeText');
     if (!el) return;
     const text = event.payload.text || '';
     el.textContent = text;
     el.classList.toggle('has-text', !!text);
+    // Re-enter flex layout only when there's text to show.
+    el.style.display = text ? '' : 'none';
     // Scroll to the rightmost (latest) content so older text exits left.
     el.scrollLeft = el.scrollWidth;
   }).catch(e => console.error('listen realtime-text failed:', e));

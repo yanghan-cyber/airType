@@ -507,6 +507,7 @@ fn handle_hotkey_transition(
                 let app_clone = app_handle.clone();
                 let buffer_clone = buffer_arc.clone();
                 let runtime_clone = runtime_arc.clone();
+                let source_clone = source;
                 std::thread::spawn(move || {
                     log_debug("[pipeline] Realtime finalize thread started");
                     let text_result = match session {
@@ -526,7 +527,7 @@ fn handle_hotkey_transition(
                         }
                     };
                     log_debug(&format!("[pipeline] Realtime result: '{:?}'", text_result.as_ref().ok().map(|t| t.as_str())));
-                    finish_direct_inject(text_result, &state_clone, &app_clone);
+                    finish_direct_inject(text_result, source_clone, &state_clone, &app_clone);
                 });
                 return;
             }
@@ -628,9 +629,13 @@ fn transcribe_batch(pcm: &[u8], sample_rate: u32) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Inject text directly (realtime path skips LLM processing modes for speed).
+/// Finalize realtime transcription: route the result through the same
+/// post-processing pipeline as the batch path (LLM mode or mode-selection),
+/// so realtime users still get AI post-processing. The `direct` mode
+/// short-circuits in run_llm_with_fallback (no API call) → no extra latency.
 fn finish_direct_inject(
     result: Result<String, String>,
+    source: HotkeySource,
     state: &Arc<Mutex<AppState>>,
     app_handle: &tauri::AppHandle,
 ) {
@@ -642,11 +647,26 @@ fn finish_direct_inject(
             };
             if cancelled {
                 log_debug("[pipeline] Cancelled before inject, discarding");
-            } else {
-                let mut s = state.lock().unwrap();
-                let _ = transition_to(&mut s.recording, RecordingState::Done);
-                drop(s);
-                let _ = inject::inject_text(&text);
+                return;
+            }
+            let cfg = config::AppConfig::load(&config::config_path());
+            match source {
+                HotkeySource::Primary => {
+                    // Same LLM post-processing as the batch path
+                    handle_default_mode(text, &cfg, state, app_handle);
+                }
+                HotkeySource::Secondary => {
+                    log_debug("[pipeline] Secondary hotkey: showing mode selection");
+                    let mut s = state.lock().unwrap();
+                    let _ = transition_to(&mut s.recording, RecordingState::ModeSelection { text: text.clone() });
+                    drop(s);
+                    if let Some(win) = app_handle.get_webview_window("capsule") {
+                        let _ = win.emit("mode-selection", serde_json::json!({
+                            "text": text,
+                            "modes": cfg.processing_modes
+                        }));
+                    }
+                }
             }
         }
         Ok(_) => {
@@ -656,19 +676,19 @@ fn finish_direct_inject(
             let _ = transition_to(&mut s.recording, RecordingState::Idle);
             drop(s);
             close_capsule_window(app_handle);
-            return;
         }
         Err(e) => {
             let mut s = state.lock().unwrap();
             let _ = transition_to(&mut s.recording, RecordingState::Error(e));
+            drop(s);
+            std::thread::sleep(Duration::from_millis(2000));
+            let mut s = state.lock().unwrap();
+            if matches!(s.recording, RecordingState::Error(_)) {
+                let _ = transition_to(&mut s.recording, RecordingState::Idle);
+                drop(s);
+                close_capsule_window(app_handle);
+            }
         }
-    }
-    std::thread::sleep(Duration::from_millis(2000));
-    let mut s = state.lock().unwrap();
-    if matches!(s.recording, RecordingState::Done | RecordingState::Error(_)) {
-        let _ = transition_to(&mut s.recording, RecordingState::Idle);
-        drop(s);
-        close_capsule_window(app_handle);
     }
 }
 
