@@ -2,6 +2,13 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use crate::log::log_debug;
 
+/// Fixed capsule window size for the whole recording cycle. Wide enough for
+/// realtime text so we never resize at runtime (resizing makes the centered
+/// capsule jump → flicker). All position math MUST use these consistently so
+/// the capsule stays where the user placed it.
+pub const CAPSULE_WIN_W: f64 = 520.0;
+pub const CAPSULE_WIN_H: f64 = 80.0;
+
 fn load_config() -> crate::config::AppConfig {
     crate::config::AppConfig::load(&crate::config::config_path())
 }
@@ -180,13 +187,20 @@ pub async fn fetch_asr_model_list() -> serde_json::Value {
 #[tauri::command]
 pub fn enter_position_mode(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("capsule") {
-        // Reposition capsule to its configured location before showing
         let cfg = load_config();
         if let Ok(Some(monitor)) = win.primary_monitor() {
             let scale = monitor.scale_factor();
+            // MUST set_size before set_position: the window may have been
+            // resized to a small size (e.g. showDone → 60x60) after the last
+            // recording. Computing the position with 520x80 while the window
+            // is actually 60x60 causes the position-mode capsule to misalign
+            // with the recording capsule.
+            let phys_w = (CAPSULE_WIN_W * scale) as u32;
+            let phys_h = (CAPSULE_WIN_H * scale) as u32;
+            let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(phys_w, phys_h)));
             let (x, y) = cfg.capsule_position(
                 monitor.size().width as f64, monitor.size().height as f64,
-                150.0 * scale, 40.0 * scale, scale,
+                CAPSULE_WIN_W * scale, CAPSULE_WIN_H * scale, scale,
             );
             win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)))
                 .map_err(|e| e.to_string())?;
@@ -222,11 +236,12 @@ pub fn reset_capsule_position(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("capsule") {
         if let Ok(Some(monitor)) = win.primary_monitor() {
             let scale = monitor.scale_factor();
-            let win_w = 150.0 * scale;
-            let win_h = 40.0 * scale;
+            let phys_w = (CAPSULE_WIN_W * scale) as u32;
+            let phys_h = (CAPSULE_WIN_H * scale) as u32;
+            let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(phys_w, phys_h)));
             let (x, y) = cfg.capsule_position(
                 monitor.size().width as f64, monitor.size().height as f64,
-                win_w, win_h, scale,
+                CAPSULE_WIN_W * scale, CAPSULE_WIN_H * scale, scale,
             );
             win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)))
                 .map_err(|e| e.to_string())?;

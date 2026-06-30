@@ -198,28 +198,20 @@ fn main() {
 pub fn position_capsule(win: &tauri::WebviewWindow) {
     let config_path = config::config_path();
     let cfg = config::AppConfig::load(&config_path);
-    // Fixed window size for the whole recording cycle. Wide enough for the
-    // realtime-text capsule so we NEVER resize at runtime — resizing makes the
-    // centered capsule jump horizontally, which is the flicker source.
-    const WIN_W: f64 = 520.0;
-    const WIN_H: f64 = 80.0; // extra height for box-shadow + entry translateY
-    const CAPSULE_H: f64 = 40.0;
     if let Ok(monitor) = win.primary_monitor() {
         if let Some(m) = monitor {
             let scale = m.scale_factor();
-            let phys_w = (WIN_W * scale) as u32;
-            let phys_h = (WIN_H * scale) as u32;
+            let phys_w = (commands::CAPSULE_WIN_W * scale) as u32;
+            let phys_h = (commands::CAPSULE_WIN_H * scale) as u32;
             let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(phys_w, phys_h)));
-            // Horizontally center the window (capsule centers inside it).
-            // Vertically, capsule_position with CAPSULE_H gives the top y for a
-            // 40-tall window; shift up by half the extra height so the
-            // vertically-centered capsule lands at the same spot as before.
-            let (x, y_capsule) = cfg.capsule_position(
+            // Capsule centers inside the fixed window. capsule_position returns
+            // the window's top-left so the window-centered capsule lands where
+            // intended. save_capsule_position stores this same top-left →
+            // what-you-see-is-what-you-get across recording sessions.
+            let (x, y) = cfg.capsule_position(
                 m.size().width as f64, m.size().height as f64,
-                WIN_W * scale, CAPSULE_H * scale, scale,
+                commands::CAPSULE_WIN_W * scale, commands::CAPSULE_WIN_H * scale, scale,
             );
-            let extra_v = ((WIN_H - CAPSULE_H) / 2.0 * scale) as i32;
-            let y = (y_capsule - extra_v).max(0);
             if let Err(e) = win.set_position(tauri::Position::Physical(
                 tauri::PhysicalPosition::new(x, y)
             )) {
